@@ -1,0 +1,1679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>node-banana architecture</title>
+<meta name="description" content="An isometric, scrubbable explainer of Node Banana: a local, bring-your-own-key node editor whose browser runs the graph, whose Next.js routes call the AI providers, and whose asset library keeps every output on disk.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #F4F4F2;
+  --paper: #FFFFFF;
+  --ink: #161616;
+  --ink-2: #4A4A4A;
+  --grey: #8A8A8A;
+  --hair: #D3D3CE;
+  --red: #FF2E2E;
+  --blue: #1F5BFF;
+  --magenta: #FF2BD6;
+  --yellow: #FFD400;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --bar-h: 64px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; }
+body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#overlay { position: fixed; inset: 0; pointer-events: none; }
+#leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#leaders line { stroke: var(--grey); stroke-width: 1; vector-effect: non-scaling-stroke; }
+#leaders line.tree { stroke-dasharray: 3 3; }
+#leaders circle { fill: var(--ink); }
+#leaders circle.focus { fill: var(--yellow); stroke: var(--ink); stroke-width: 1; }
+
+/* debug corners */
+.corner { position: absolute; font: 400 10px/1.45 var(--mono); color: var(--grey); letter-spacing: 0.02em; white-space: nowrap; }
+.corner b { color: var(--ink); font-weight: 600; }
+#c-tl { top: 14px; left: 18px; }
+#c-tr { top: 14px; right: 18px; text-align: right; }
+#c-bl { bottom: calc(var(--bar-h) + 12px); left: 18px; }
+#c-br { bottom: calc(var(--bar-h) + 12px); right: 18px; text-align: right; }
+#legend { margin-top: 8px; display: inline-grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 1px; text-align: left; }
+#legend i { display: inline-block; width: 8px; height: 8px; margin-right: 5px; vertical-align: -1px; }
+#legend span { color: var(--ink-2); }
+
+/* title band */
+#band { position: absolute; top: 36px; left: 18px; max-width: min(72vw, 1100px); }
+#title { font: 500 clamp(24px, 3.1vw, 42px)/1.08 var(--sans); letter-spacing: -0.022em; white-space: nowrap; margin: 0; }
+#idea { margin-top: 8px; font: 400 clamp(13px, 1.12vw, 16px)/1.35 var(--sans); color: var(--ink-2); white-space: nowrap; }
+#step { margin-top: 8px; font: 500 11px/1.4 var(--mono); color: var(--ink); white-space: nowrap; min-height: 15px; }
+#step .n { display: inline-block; background: var(--yellow); color: var(--ink); padding: 0 5px; margin-right: 8px; }
+.inf { display: inline-block; font: 600 9px/1 var(--mono); letter-spacing: 0.06em; color: var(--ink-2); border: 1px solid var(--ink-2); padding: 2px 4px 1px; margin-left: 8px; vertical-align: 2px; }
+
+/* labels */
+.lbl { position: absolute; left: 0; top: 0; max-width: 400px; background: var(--paper); border: 1px solid var(--hair); padding: 6px 8px 7px; font: 400 10px/1.4 var(--mono); color: var(--ink-2); white-space: nowrap; will-change: transform, opacity; opacity: 0; }
+.lbl .nm { font-weight: 600; font-size: 11px; color: var(--ink); }
+.lbl .nm .k { display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 0; background: var(--ink); }
+.lbl .pt { color: var(--grey); }
+.lbl .ow { color: var(--ink-2); font-family: var(--sans); font-size: 11px; margin-top: 2px; }
+.lbl .sy { color: var(--ink); margin-top: 3px; }
+.lbl .sy::before { content: "fn "; color: var(--grey); }
+.lbl .sy.type::before { content: "type "; }
+.lbl .sy.val::before { content: "const "; }
+.lbl pre { margin: 5px 0 0; padding: 4px 6px; background: var(--bg); font: 400 9.5px/1.45 var(--mono); color: var(--ink-2); border-left: 2px solid var(--hair); }
+.lbl pre .ln { color: var(--grey); margin-right: 8px; }
+.lbl .detail { display: block; }
+.lbl.brief .detail { display: none; }
+.lbl.brief { padding: 3px 6px 4px; }
+.lbl.brief .nm { font-size: 10px; }
+.lbl .bp { display: none; color: var(--grey); margin-left: 6px; }
+.lbl.brief .bp { display: inline; }
+.coord { position: absolute; left: 0; top: 0; font: 400 9px/1 var(--mono); color: var(--grey); white-space: nowrap; opacity: 0; }
+
+/* tags */
+.tag { position: absolute; left: 0; top: 0; font: 600 10px/1 var(--mono); letter-spacing: 0.04em; padding: 4px 6px 3px; white-space: nowrap; background: var(--paper); border: 1px solid var(--ink); color: var(--ink); opacity: 0; }
+.tag.red { color: var(--red); border-color: var(--red); }
+.tag.blue { color: var(--blue); border-color: var(--blue); }
+.tag.magenta { color: var(--magenta); border-color: var(--magenta); }
+.tag.yellow { background: var(--yellow); border-color: var(--ink); }
+
+/* file tree */
+#tree { position: absolute; left: 18px; width: min(460px, 44vw); opacity: 0; font: 400 11px/1.25 var(--mono); }
+#tree .hd { color: var(--grey); font-size: 10px; margin-bottom: 6px; }
+#tree .row { display: flex; gap: 10px; padding: 3px 0 3px 10px; color: var(--grey); border-left: 2px solid transparent; }
+#tree .row .p { color: var(--ink-2); min-width: 9.5em; font-weight: 600; }
+#tree .row .n { font-family: var(--sans); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tree .row.on { border-left-color: var(--yellow); background: rgba(255, 212, 0, 0.14); color: var(--ink); }
+#tree .row.on .p { color: var(--ink); }
+
+/* control bar */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; height: var(--bar-h); background: var(--paper); border-top: 1px solid var(--hair); display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; column-gap: 14px; padding: 0 18px; font: 400 10px/1 var(--mono); color: var(--grey); user-select: none; }
+#bar button { font: inherit; color: var(--ink); background: none; border: 0; cursor: pointer; padding: 0; }
+#bar button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+#play { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--ink) !important; }
+#play svg { width: 12px; height: 12px; fill: var(--ink); }
+#tc { min-width: 104px; color: var(--ink); }
+#tl { position: relative; height: 40px; }
+#chaps { position: absolute; left: 0; right: 0; top: 2px; height: 20px; display: flex; }
+#chaps button { position: relative; flex: none; height: 20px; text-align: left; padding: 0 6px !important; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--grey) !important; border-left: 1px solid var(--hair) !important; font-size: 10px; }
+#chaps button.on { color: var(--ink) !important; }
+#chaps button.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--yellow); }
+#chaps button .cn { color: var(--ink-2); margin-right: 5px; }
+#track { position: absolute; left: 0; right: 0; top: 27px; height: 8px; background: var(--bg); cursor: pointer; touch-action: none; }
+#fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ink); }
+#knob { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--ink); transform: translateX(-1px); }
+#speed { display: flex; border: 1px solid var(--hair); }
+#speed button { padding: 6px 8px !important; color: var(--grey) !important; }
+#speed button.on { color: var(--ink) !important; background: var(--bg) !important; }
+.fatal { position: fixed; inset: 0; display: grid; place-items: center; font: 500 14px var(--mono); color: var(--red); }
+
+@media (max-width: 760px) {
+  :root { --bar-h: 64px; }
+  #band { top: 32px; max-width: calc(100vw - 36px); }
+  #title { font-size: 22px; white-space: normal; }
+  #idea { white-space: normal; font-size: 13px; }
+  #step { white-space: normal; font-size: 10px; line-height: 1.5; }
+  #c-tr .fps-extra, #legend span { display: none; }
+  #legend { position: fixed; left: 12px; bottom: calc(var(--bar-h) + 40px); margin: 0; grid-template-columns: auto auto auto auto; column-gap: 10px; }
+  #c-bl { left: 12px; bottom: calc(var(--bar-h) + 8px); }
+  #c-bl .iso { display: none; }
+  #c-br { right: 12px; bottom: calc(var(--bar-h) + 24px); }
+  #c-br .br { display: none; }
+  #chaps button { padding: 0 3px !important; font-size: 9px; }
+  #chaps button .cl { display: none; }
+  #chaps button .cn { margin: 0; }
+  #bar { grid-template-columns: auto 1fr auto; column-gap: 10px; padding: 0 12px; }
+  #tc { display: none; }
+  #speed button { padding: 6px 5px !important; }
+  .lbl { max-width: 240px; }
+  .lbl .ow { white-space: normal; }
+  .lbl.brief .bp { display: none; }
+  .lbl pre, .lbl .sy { display: none; }
+  #tree { width: calc(100vw - 36px); }
+  #tree .row { display: block; padding: 2px 0 2px 8px; }
+  #tree .row .p { display: block; min-width: 0; }
+  #tree .row .n { display: block; white-space: normal; font-size: 10.5px; color: inherit; }
+  .coord { display: none; }
+}
+
+</style>
+</head>
+<body>
+<canvas id="gl" aria-label="Isometric animation of the architecture"></canvas>
+<div id="overlay">
+  <svg id="leaders" aria-hidden="true"></svg>
+  <div id="labels"></div>
+  <div id="tree" aria-hidden="true"></div>
+  <div id="band"><h1 id="title"></h1><div id="idea"></div><div id="step"></div></div>
+  <div class="corner" id="c-tl"></div>
+  <div class="corner" id="c-tr"><div id="fps"></div><div id="legend"></div></div>
+  <div class="corner" id="c-bl"></div>
+  <div class="corner" id="c-br"></div>
+</div>
+<div id="bar" role="toolbar" aria-label="Playback">
+  <button id="play" aria-label="Pause"></button>
+  <div id="tc">00:00.0 / 00:00.0</div>
+  <div id="tl"><div id="chaps"></div><div id="track" role="slider" aria-label="Scrub" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><div id="fill"></div><div id="knob"></div></div></div>
+  <div id="speed"><button data-s="0.5">0.5x</button><button data-s="1" class="on">1x</button><button data-s="2">2x</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+// node-banana: architecture explainer. Every label and caption comes from facts/node-banana.json or the
+// source at 8929b7a; `// fact:` comments cite the line each beat rests on.
+// Layout: a 4-unit grid. The Run path is a staircase that reads left to right on screen, every pipe on an iso axis:
+//   user (-8,4) -> canvas (-4,4) -> store (-4,0) -> executors (0,0) -> /api/generate (0,-4) -> providers (4,-4) -> AI APIs (4,-8)
+// The save branch hangs below it (executors -> recorder (0,4) -> asset library (4,4)), the workflow file sits above the
+// store (-4,-4), and the agent chat sits up-left (-8,0), wired to the store and to the user. The Run card's press runs
+// user -> store on an overhead pipe (y 1.15) so it never passes through the agent block. 'another website' (0,-8) appears
+// only in decision 1 and lifts away after it.
+// Browser side: user, canvas, store, executors, recorder. Server side (Next.js on 127.0.0.1): /api/generate, providers,
+// the asset library and the workflow file route. The agent spans both (panel in the browser, harness on the server).
+window.SPEC = {
+  repo: { name: 'node-banana', slug: 'kngzzz/node-banana', commit: '8929b7a', branch: 'ccr-77dba0ae-tfpn1d' },
+  pageTitle: 'node-banana architecture',
+  description: 'An isometric, scrubbable explainer of Node Banana: a local, bring-your-own-key node editor whose browser runs the graph, whose Next.js routes call the AI providers, and whose asset library keeps every output on disk.',
+  view: 15,
+  modules: [
+    // fact: README.md:28 "node-based workflow editor for AI media generation"; README.md:14 "Local, private, MIT, BYOK."
+    { id: 'housing', kind: 'housing', at: [-1.5, 1.6], size: [7, 2.2, 6.4], name: 'node-banana', path: 'README.md',
+      owns: 'node-based workflow editor for AI media; local, private, BYOK', side: 'n' },
+    // fact: CLAUDE.md:66 "User clicks Run or presses Cmd/Ctrl+Enter"; CLAUDE.md:402 the chat's Run card; FloatingActionBar.tsx:477, :491
+    { id: 'user', kind: 'person', at: [-8, 4], size: [0.8, 1, 0.8], name: 'user', path: 'src/components/FloatingActionBar.tsx',
+      owns: 'starts every run: Run button, Cmd/Ctrl+Enter, the Run card', symbol: 'handleRunClick', codeLine: 491,
+      code: ['      runBatch({ kind: "all" });'], side: 'nw', sideBrief: 'nw' },
+    // fact: src/components/WorkflowCanvas.tsx:851 isValidConnection; :133 rawNodeTypes; :1916 handleKeyDown
+    { id: 'canvas', kind: 'block', at: [-4, 4], size: [2.4, 1.2, 1.9], name: 'workflow canvas', path: 'src/components/WorkflowCanvas.tsx',
+      owns: 'browser: React Flow editor, node components, connection rules', symbol: 'isValidConnection', codeLine: 851,
+      code: ['  const isValidConnection = useCallback(', '    (connection: Connection | Edge): boolean => {'], side: 's', sideBrief: 'sw' },
+    // fact: src/store/workflowStore.ts:2337 executeWorkflow; :2817 runBatch; :4447 useWorkflowStore; facts state.stores[0].where "browser memory"
+    { id: 'store', kind: 'block', at: [-4, 0], size: [3, 1.6, 2.4], name: 'workflow store', path: 'src/store/workflowStore.ts',
+      owns: 'browser memory: graph + run engine: runBatch, executeWorkflow', symbol: 'executeWorkflow', codeLine: 2337,
+      code: ['  executeWorkflow: async (startFromNodeId?: string) => {', '    if (!canStartExecution(get().desktopConnected)) return;'], side: 'n', sideBrief: 'n' },
+    // fact: src/store/execution/types.ts:73 NodeExecutor; nanoBananaExecutor.ts:142 fetch("/api/generate")
+    { id: 'executors', kind: 'rack', at: [0, 0], size: [1.8, 2.0, 1.5], name: 'node executors', path: 'src/store/execution',
+      owns: 'in the browser, one per node type: call a route, write outputs', symbol: 'executeNanoBanana',
+      codeFile: 'src/store/execution/nanoBananaExecutor.ts', codeLine: 142,
+      code: ['      const response = await fetch("/api/generate", {', '        method: "POST",'],
+      children: ['nanoBananaExecutor.ts', 'generateVideoExecutor.ts', 'generate3dExecutor.ts', 'generateAudioExecutor.ts', 'llmGenerateExecutor.ts', 'comfyAppExecutor.ts', 'simpleNodeExecutors.ts'],
+      side: 'e', sideBrief: 's' },
+    // fact: src/app/api/generate/route.ts:112 provider = selectedModel?.provider || "gemini"; :124 user key first; :607 Gemini key; :690
+    { id: 'generate', kind: 'block', at: [0, -4], size: [2.4, 1.1, 1.8], name: '/api/generate', path: 'src/app/api/generate/route.ts',
+      owns: 'server route: picks the provider; key from a header, else .env', symbol: 'POST', codeLine: 690,
+      code: ['    return await generateWithGemini(', '      requestId,', '      geminiApiKey,'], side: 'n', sideBrief: 'n' },
+    // fact: src/app/api/generate/providers/gemini.ts:26 generateWithGemini(requestId, apiKey, ...); :110 retryTransient(generateContent)
+    { id: 'providers', kind: 'rack', at: [4, -4], size: [1.7, 1.8, 1.4], name: 'provider adapters', path: 'src/app/api/generate/providers',
+      owns: "server: one adapter per provider makes that provider's API call", symbol: 'generateWithGemini',
+      codeFile: 'src/app/api/generate/providers/gemini.ts', codeLine: 26,
+      code: ['export async function generateWithGemini(', '  requestId: string,', '  apiKey: string,'],
+      children: ['gemini.ts', 'gemini-omni.ts', 'replicate.ts', 'fal.ts', 'kie.ts', 'comfy.ts', 'wavespeed.ts', 'openai.ts'],
+      side: 'e', sideBrief: 'e' },
+    // fact: facts modules ai-apis (gemini.ts:9, kie.ts:581, fal.ts:301, replicate.ts:26, wavespeed.ts:80, openai.ts:9, comfyRouter.ts:11);
+    // its path is the Gemini adapter that imports the Gemini SDK (the flow's provider), not a folder of its own
+    { id: 'apis', kind: 'external', at: [4, -8], size: [1.8, 1.4, 1.8], name: 'outside AI APIs', path: 'src/app/api/generate/providers/gemini.ts',
+      owns: 'Gemini, Replicate, fal.ai, Kie.ai, WaveSpeed, OpenAI, Comfy', codeFile: 'src/app/api/generate/providers/gemini.ts', codeLine: 9,
+      code: ['import { GoogleGenAI } from "@google/genai";'], side: 'n', sideBrief: 'n' },
+    // fact: src/lib/assets/client/recorder.ts:613-614 recordAsset mints the id; :67 CONCURRENCY = 2; :433 the queue
+    { id: 'recorder', kind: 'block', at: [0, 4], size: [1.7, 0.95, 1.4], name: 'asset recorder', path: 'src/lib/assets/client/recorder.ts',
+      owns: 'browser queue: uploads each output in the background', symbol: 'recordAsset', codeLine: 614,
+      code: ['  const assetId = newAssetId();'], side: 'sw', sideBrief: 'sw' },
+    // fact: src/lib/assets/server/library.ts:4 "Sidecars ... are the source of truth"; :1306-1311 addRecord, writeSidecar(clean, true)
+    { id: 'library', kind: 'store', at: [4, 4], size: [2.2, 1.5, 2.2], name: 'asset library', path: 'src/lib/assets/server/library.ts',
+      owns: 'server: every output on disk; the sidecar per asset is the truth', symbol: 'addRecord', codeLine: 1311,
+      code: ['      await this.writeSidecar(clean, true);'], side: 'e', sideBrief: 'e' },
+    // fact: facts state.stores "Workflow file" written_by POST; src/app/api/workflow/route.ts:14 export async function POST; :122-125 write beside, rename over, fsync
+    { id: 'wfile', kind: 'store', at: [-4, -4], size: [1.5, 1.1, 1.5], name: 'workflow file', path: 'src/app/api/workflow/route.ts',
+      owns: 'server: the workflow as JSON on disk; Cmd/Ctrl+S or autosave', symbol: 'POST', codeLine: 125,
+      code: ['    await atomicWriteFile(filePath, json, { fsync: true });'], side: 'e', sideBrief: 'ne' },
+    // fact: src/lib/agent/types.ts:4-5 "Each turn runs on the user's own Claude Code or Codex (ChatGPT) login"; runtime.ts:9-10 "No tool starts a run"; :221-222 runOffer
+    { id: 'agent', kind: 'block', at: [-8, 0], size: [2.2, 1.1, 1.7], name: 'agent chat', path: 'src/lib/agent/tools/runtime.ts',
+      owns: 'runs on a Claude Code or Codex login; edits, never starts a run', symbol: 'createAgentToolRuntime', codeLine: 221,
+      code: ['    runOffer() {', '      if (live.running === true) return null;'], side: 'nw', sideBrief: 'w' },
+    // fact: server.js:58-60 "Another website open in the same browser can still send requests here ... /api/generate would
+    // spend credits"; :66-68 isForeignBrowserRequest; :87-89 403. Decision 1 only (assembled there, lifted away after).
+    { id: 'website', kind: 'external', at: [0, -8], size: [1.6, 1.1, 1.4], name: 'another website', path: 'server.js',
+      owns: 'same browser; a POST to /api/generate would spend credits', symbol: 'isForeignBrowserRequest', codeLine: 67,
+      code: ["  const site = req.headers['sec-fetch-site'];", "  if (site === 'cross-site' || site === 'same-site') return true;"], side: 'e', sideBrief: 'e' },
+  ],
+  pipes: [
+    { id: 'in', from: 'user', to: 'housing' },
+    { id: 'out', from: 'housing', to: 'apis', bend: 'xz' },
+    // fact: CLAUDE.md:66; WorkflowCanvas.tsx:1981-1985 Cmd/Ctrl+Enter -> runBatch({ kind: "all" })
+    { id: 'uc', from: 'user', to: 'canvas' },
+    { id: 'cs', from: 'canvas', to: 'store' },
+    // fact: workflowStore.ts:2486 _buildExecutionContext; :2545-2546 executeNanoBanana
+    { id: 'se', from: 'store', to: 'executors' },
+    // fact: nanoBananaExecutor.ts:112 buildGenerateHeaders; :142 fetch("/api/generate")
+    { id: 'eg', from: 'executors', to: 'generate' },
+    // fact: route.ts:690 generateWithGemini (in-process)
+    { id: 'gp', from: 'generate', to: 'providers' },
+    // fact: gemini.ts:110 ai.models.generateContent
+    { id: 'pa', from: 'providers', to: 'apis' },
+    // fact: nanoBananaExecutor.ts:232 recordOutput; assetRecording.ts:31 ctx.recordAsset(input)
+    { id: 'er', from: 'executors', to: 'recorder' },
+    // fact: recorder.ts:413-419 beginRecord (POST /api/assets), then uploadAssetBytes (PUT)
+    { id: 'rl', from: 'recorder', to: 'library' },
+    // fact: workflowStore.ts:4156 autosave saveToFile; src/app/api/workflow/route.ts:125
+    { id: 'sw', from: 'store', to: 'wfile' },
+    // fact: useAgentChat.ts:261 store.applyAgentGraphOps(batch)
+    { id: 'as', from: 'agent', to: 'store' },
+    // fact: CLAUDE.md:402 the chat's Run card; AgentRunCard.tsx:216 startOfferRun
+    { id: 'au', from: 'agent', to: 'user' },
+    // fact: runs.ts:150 void store.runBatch(scope, runs) (facts edge user -> store "A Run card click calls runBatch");
+    // drawn only in decision 3; it rises over the user and runs overhead (y 1.15), clear of the canvas and the agent
+    { id: 'us', from: 'user', to: 'store', via: [[-8, 1.15, 4], [-6, 1.15, 4], [-6, 1.15, 0], [-4, 1.15, 0]] },
+    // the rule "no tool starts a run": hidden until the decision chapter breaks it; it arches over the store's north side
+    { id: 'arun', from: 'agent', to: 'executors', y: 0.85, via: [[-8, -2], [0, -2]], forbidden: true },
+    // fact: server.js:87-89 a cross-site /api request gets 403; shown red and broken in decision 1
+    { id: 'xsite', from: 'website', to: 'generate', forbidden: true },
+    // fact: DesktopRecovery.tsx:81 "Recovery never submits requests."; recovery.ts:12; shown red and broken in chapter 4
+    { id: 'resend', from: 'executors', to: 'generate', y: 0.95, forbidden: true },
+  ],
+  tree: [
+    // fact: facts tree; CLAUDE.md:570 "All routes in src/app/api/"
+    { path: 'src/app/api/', note: 'HTTP routes, run by the Next.js server', ids: ['generate', 'library', 'wfile'] },
+    { path: 'src/app/api/generate/', show: 'generate/', depth: 1, note: 'generate route, poll route, provider adapters', ids: ['generate', 'providers'] },
+    { path: 'src/app/api/assets/', show: 'assets/', depth: 1, note: 'library routes: record, upload bytes, list, read', ids: ['library'] },
+    // fact: facts tree src/components/WorkflowCanvas.tsx, src/components/agent/ "Agent chat panel, Run card and results cards"
+    { path: 'src/components/', note: 'WorkflowCanvas.tsx, nodes/, Run button, agent panel', ids: ['canvas', 'agent'] },
+    { path: 'src/store/', note: 'workflowStore.ts: graph state and the run engine', ids: ['store'] },
+    { path: 'src/store/execution/', show: 'execution/', depth: 1, note: 'node executors, task polling, asset recording', ids: ['executors'] },
+    // src/lib/providers holds the registry, catalog and retry, not the adapters (those are src/app/api/generate/providers)
+    { path: 'src/lib/', note: 'assets, agent, providers, comfy, llm, desktop and more', ids: ['recorder', 'library', 'agent'] },
+    { path: 'src/lib/assets/', show: 'assets/', depth: 1, note: 'client/: the recorder; server/: the on-disk library', ids: ['recorder', 'library'] },
+    { path: 'src/lib/agent/', show: 'agent/', depth: 1, note: 'agent harnesses, tools, graph draft, prompting', ids: ['agent'] },
+    { path: 'server.js', note: 'custom Next server: loopback bind, cross-site refusal', ids: [] },
+    { path: 'electron/', note: 'desktop shell: crash recovery, updates', ids: [] },
+  ],
+  chapters: [
+    {
+      id: 'purpose', short: 'Purpose', title: 'A local node editor for AI media', dur: 14,
+      // fact: facts purpose.sentence; README.md:28; CLAUDE.md:29 "connect them via typed handles, and execute pipelines that call AI APIs"
+      idea: 'Wire typed AI nodes on a canvas, then run them as a pipeline of AI API calls, on this machine.',
+      camera: { at: [-0.5, 0.6, -0.5], zoom: 0.98 },
+      beats: [
+        [0.2, 'assemble', ['housing'], { dur: 1.4 }],
+        [0.9, 'assemble', ['user', 'apis'], { stagger: 0.25 }],
+        [1.8, 'labels', { full: ['housing'] }],
+        [2.4, 'draw', ['in', 'out'], { dur: 0.9 }],
+        // fact: server.js:17-20 "Listen on this machine only" ... const hostname = process.env.HOST || '127.0.0.1'
+        [3.0, 'tag', 'housing', 'listens on 127.0.0.1', { dur: 2.4, dy: -40 }],
+        // fact: CLAUDE.md:66 "User clicks Run or presses Cmd/Ctrl+Enter"
+        [5.0, 'tag', 'user', 'Run: Cmd/Ctrl+Enter', { color: 'yellow', dur: 2.2 }],
+        [5.2, 'flow', 'in', { dur: 1.6 }],
+        [7.0, 'flow', 'out', { dur: 1.5 }],
+        [7.2, 'labels', { full: ['housing'], brief: ['apis'] }],
+        // fact: README.md:14 "BYOK"; src/store/utils/buildApiHeaders.ts:15 "X-Gemini-API-Key"
+        [7.8, 'tag', 'apis', "BYOK: the user's own key", { color: 'blue', dur: 2.4, dy: 40 }],
+        [8.7, 'flow', '-out', { dur: 1.5 }],
+        [10.3, 'flow', '-in', { dur: 1.6 }],
+        // fact: nanoBananaExecutor.ts:259-260 updateNodeData(node.id, { outputImage: result.image
+        [11.4, 'tag', 'user', 'the image lands on the node', { color: 'blue', dur: 2.3, dy: 76 }],
+        [11.6, 'labels', { full: ['housing'], brief: ['apis', 'user'] }],
+      ],
+    },
+    {
+      id: 'modules', short: 'Modules', title: 'Who owns what', dur: 28,
+      // fact: facts state.stores: the workflow store and the recorder queue live in browser memory; recorder.ts "Browser queue"
+      idea: 'In the browser: the canvas, the store that runs the graph, its executors and the recorder.',
+      camera: { at: [-0.8, 0.5, -0.2], zoom: 0.92, dur: 1.6 },
+      labels: { full: [] },
+      beats: [
+        [0.1, 'lift', 'housing', { dur: 1.2 }],
+        [1.3, 'assemble', ['canvas']], [1.5, 'labels', { full: ['canvas'], brief: ['user', 'apis'] }],
+        [3.9, 'assemble', ['store']], [4.1, 'labels', { full: ['store'], brief: ['user', 'apis', 'canvas'] }],
+        [6.5, 'assemble', ['executors']], [6.7, 'labels', { full: ['executors'], brief: ['user', 'apis', 'canvas', 'store'] }],
+        [9.1, 'assemble', ['recorder']], [9.3, 'labels', { full: ['recorder'], brief: ['user', 'apis', 'canvas', 'store', 'executors'] }],
+        // fact: CLAUDE.md:570 "All routes in src/app/api/"; CLAUDE.md:532 every asset saved to disk as it is made
+        [11.5, 'idea', 'On the server: the /api routes call the providers and keep every output on disk.'],
+        [11.7, 'assemble', ['generate']], [11.9, 'labels', { full: ['generate'], brief: ['user', 'apis', 'canvas', 'store', 'executors', 'recorder'] }],
+        [14.3, 'assemble', ['providers']], [14.5, 'labels', { full: ['providers'], brief: ['user', 'apis', 'canvas', 'store', 'executors', 'recorder', 'generate'] }],
+        [16.9, 'assemble', ['library']], [17.1, 'labels', { full: ['library'], brief: ['user', 'apis', 'canvas', 'store', 'executors', 'recorder', 'generate', 'providers'] }],
+        // fact: CLAUDE.md:534 the library root "defaults to ~/Documents/Node Banana"
+        [17.7, 'tag', 'library', '~/Documents/Node Banana', { color: 'magenta', dur: 2.0, dy: 52 }],
+        [19.5, 'assemble', ['wfile']], [19.7, 'labels', { full: ['wfile'], brief: ['user', 'apis', 'canvas', 'store', 'executors', 'recorder', 'generate', 'providers', 'library'] }],
+        // fact: CLAUDE.md:376 "It creates workflows, edits the canvas and changes node settings."
+        [21.9, 'idea', 'Beside them, the agent chat edits the same graph from a chat window.'],
+        [22.1, 'assemble', ['agent']], [22.3, 'labels', { full: ['agent'], brief: ['user', 'store'] }],
+        [24.7, 'draw', ['uc', 'cs', 'se', 'eg', 'gp', 'pa', 'er', 'rl', 'sw', 'as', 'au'], { stagger: 0.14 }],
+        [25.3, 'labels', { brief: 'all' }],
+        // fact: facts state.stores (store, recorder queue: browser memory); CLAUDE.md:570 "All routes in src/app/api/"
+        [25.3, 'idea', 'Browser: canvas, store, executors, recorder. Server: the /api routes, providers, library.'],
+      ],
+    },
+    {
+      id: 'flow', short: 'Flow', title: 'One Run, end to end', dur: 31,
+      // fact: facts flow.name "One Run of a Gemini image node"; flow.trigger
+      idea: 'One Run of a Gemini image node, from a keypress to a file on disk.',
+      camera: { at: [-3.6, 0.5, 1.3], zoom: 1.22 },
+      focus: ['user', 'canvas'], labels: { full: ['canvas'], brief: ['user'] },
+      beats: [
+        // fact: src/components/WorkflowCanvas.tsx:1916 handleKeyDown; :1981 Cmd/Ctrl+Enter (flow step 1)
+        [1.4, 'step', 'The user presses Cmd/Ctrl+Enter; the canvas keydown handler catches it'],
+        [1.6, 'flow', 'uc', { dur: 1.5 }],
+        // fact: WorkflowCanvas.tsx:1985 runBatch({ kind: "all" }); workflowStore.ts:2817; CLAUDE.md:67 runCount 1-50 (flow step 2)
+        [4.0, 'focus', ['canvas', 'store']], [4.0, 'labels', { full: ['store'], brief: ['canvas'] }],
+        [4.2, 'step', 'runBatch repeats the run runCount times (1-50), one run after another'],
+        [4.4, 'flow', 'cs', { dur: 1.5 }],
+        // fact: src/store/workflowStore.ts:2646 groupNodesByLevel; :2545-2546 case "nanoBanana" (flow step 3)
+        [6.8, 'focus', ['store', 'executors']], [6.8, 'labels', { full: ['executors'], brief: ['store'] }],
+        [7.0, 'step', 'executeWorkflow sorts nodes into levels and dispatches executeNanoBanana'],
+        [7.2, 'flow', 'se', { dur: 1.5 }], [8.6, 'pull', 'executors', 0, { dur: 1.5 }],
+        // fact: nanoBananaExecutor.ts:104 status "loading"; :142 fetch("/api/generate"); :146 signal (flow step 4)
+        [10.0, 'camera', { at: [1.0, 0.5, -5.0], zoom: 1.3, dur: 1.3 }],
+        [10.0, 'focus', ['executors', 'generate']], [10.0, 'labels', { full: ['generate'], brief: ['executors'] }],
+        [10.2, 'step', 'The executor POSTs prompt and images to /api/generate; the node shows loading'],
+        [10.8, 'flow', 'eg', { dur: 1.5 }],
+        // fact: route.ts:112 default "gemini"; route.ts:124 "User-provided key takes precedence over env variable" (flow step 5)
+        [13.0, 'focus', ['generate', 'providers']], [13.0, 'labels', { full: ['providers'], brief: ['generate'] }],
+        [13.2, 'step', 'The route picks the provider (default gemini): header key first, then .env'],
+        [13.4, 'flow', 'gp', { dur: 1.4 }], [14.7, 'pull', 'providers', 0, { dur: 1.5 }],
+        // fact: gemini.ts:110 retryTransient(() => ai.models.generateContent; retry.ts:19 TRANSIENT_STATUSES (flow step 6)
+        [16.2, 'focus', ['providers', 'apis']], [16.2, 'labels', { full: ['apis'], brief: ['providers'] }],
+        [16.4, 'step', 'generateWithGemini calls generateContent, retrying transient errors'],
+        [16.6, 'flow', 'pa', { dur: 1.4 }],
+        // the answer comes back through the route to the executor
+        [18.2, 'focus', ['providers', 'generate', 'executors']], [18.2, 'labels', { brief: ['apis', 'providers', 'generate', 'executors'] }],
+        [18.4, 'flow', ['-pa', '-gp', '-eg'], { dur: 3.6 }],
+        // fact: gemini.ts:173 return NextResponse.json<GenerateResponse>(responsePayload); facts flow step 6 evidence
+        [20.6, 'tag', 'executors', 'image back as JSON', { color: 'blue', dur: 2.0 }],
+        // fact: assetRecording.ts:29-31 ctx.recordAsset(input); recorder.ts:614 newAssetId(); types.ts:63 "Returns at once" (flow step 7)
+        [22.6, 'camera', { at: [-0.8, 0.5, 2.0], zoom: 1.12, dur: 1.3 }],
+        [22.6, 'focus', ['executors', 'recorder']], [22.6, 'labels', { full: ['recorder'], brief: ['executors'] }],
+        [22.8, 'step', 'recordOutput hands the image to ctx.recordAsset, which returns an id at once'],
+        [23.2, 'flow', 'er', { dur: 1.4 }],
+        // fact: nanoBananaExecutor.ts:249 assetId into the carousel entry; :259-261 outputImage, status "complete" (flow step 8)
+        [25.2, 'focus', ['executors', 'store', 'canvas']], [25.2, 'labels', { full: ['store'], brief: ['executors', 'canvas'] }],
+        [25.4, 'step', 'updateNodeData sets outputImage and status complete; the carousel keeps assetId'],
+        [25.6, 'flow', ['-se', '-cs'], { dur: 2.4 }],
+        // fact: recorder.ts:636 queue.push; :413-419 ticket then bytes; ingest.ts:343 commitPartial; library.ts:1311, :1314 (flow step 9)
+        [28.2, 'focus', ['recorder', 'library']], [28.2, 'labels', { full: ['library'], brief: ['recorder'] }],
+        [28.4, 'step', 'In the background: a ticket, the bytes, then file, sidecar and journal on disk'],
+        [28.6, 'flow', 'rl', { dur: 1.3 }], [29.9, 'write', 'library', { dur: 1.0 }],
+      ],
+    },
+    {
+      id: 'state', short: 'State', title: 'What survives a crash', dur: 25,
+      // fact: facts state.crash.lost; state.crash.mechanism "Temp-file-and-rename writes (fsynced for workflow files, sidecars and media)"
+      idea: 'A crash loses what is only in memory; saves, media and sidecars are written by rename and stay.',
+      camera: { at: [-0.4, 0.4, 0.2], zoom: 1.08 },
+      focus: ['canvas', 'store', 'wfile', 'executors', 'recorder', 'library', 'generate'], labels: { full: ['wfile'], brief: ['store'] },
+      beats: [
+        // fact: src/app/api/workflow/route.ts:122-125 write beside, rename over, fsync; atomic-save.test.ts:86 keeps the last good save
+        [1.4, 'flow', 'sw', { dur: 1.2 }], [2.6, 'write', 'wfile'],
+        [2.8, 'tag', 'wfile', 'atomic: last good save stays', { color: 'magenta', dur: 2.4 }],
+        // fact: ingest.ts:343 commitPartial (fsynced .partial renamed into place); library.ts:1306 sidecar fsynced, then journal
+        [4.4, 'labels', { full: ['library'], brief: ['store', 'wfile', 'recorder'] }],
+        [4.4, 'flow', ['er', 'rl'], { dur: 2.4 }], [6.8, 'write', 'library'],
+        [7.0, 'tag', 'library', 'file + sidecar fsynced', { color: 'magenta', dur: 2.2 }],
+        // fact: facts state.crash.lost: in-memory store, the in-flight request, queued recorder outputs; state.stores
+        // "Upload tickets" (server memory) survives_crash "no": the whole app goes down, browser and server
+        [9.2, 'labels', { brief: ['canvas', 'store', 'wfile', 'recorder', 'library', 'executors', 'generate'] }],
+        [9.2, 'flow', 'eg', { dur: 1.0, to: 0.55, die: true }],
+        [10.2, 'crash', 'canvas'], [10.2, 'crash', 'store'], [10.2, 'crash', 'executors'], [10.2, 'crash', 'recorder'],
+        [10.2, 'crash', 'generate'], [10.2, 'crash', 'library'],
+        // fact: nanoBananaExecutor.ts:342 Network error; workflowStore.ts:1018 abort; facts state.crash.lost "the in-flight request"
+        [10.4, 'tag', 'executors', 'the app crashes mid-request', { color: 'red', dur: 2.6 }],
+        // fact: workflowStore.ts:4447 in-memory store; facts state.stores[0] survives_crash "no"
+        [11.6, 'tag', 'store', 'lost: edits since last save', { color: 'red', dur: 2.6, dy: -48 }],
+        // fact: recorder.ts:433 const queue (browser memory); page.tsx:118 pendingRecordings
+        [12.8, 'tag', 'recorder', 'lost: queued uploads', { color: 'red', dur: 2.4 }],
+        // fact: facts state.crash.resumes "No run resumes"; src/lib/assets/server/index.ts:294-299 "Once per root and process";
+        // fact: index.ts:313 await library.ensureLoaded() (the index scan) runs before :321 sweepStaleTemps
+        [15.2, 'idea', 'Restart: no run resumes; on start the library rescans its sidecars, then sweeps stale partials.'],
+        [15.4, 'recover', 'canvas'], [15.4, 'recover', 'store'], [15.6, 'recover', 'executors'], [15.6, 'recover', 'generate'],
+        [15.8, 'recover', 'recorder'], [15.8, 'recover', 'library'],
+        // fact: library.ts:4-6 "Sidecars ... are the source of truth ... built lazily by one scan"; index.ts:313
+        [16.2, 'tag', 'library', 'index rebuilt from sidecars', { color: 'magenta', dur: 2.6 }],
+        // fact: facts state.stores[0].note "Comes back only from a saved workflow file"; no auto-reopen in the web build
+        // (DesktopRecovery.tsx:21 skips recovery outside the desktop app)
+        [17.4, 'flow', '-sw', { dur: 1.3 }],
+        // fact: facts state.stores[0].note; workflow file route.ts:14 POST / load by the user (no auto-reopen found in src/)
+        [18.0, 'tag', 'store', 'reopened by hand: last save', { color: 'magenta', dur: 2.4 }],
+        // fact: src/lib/desktop/recovery.ts:12 "Stopped after recovery ... no requests were resubmitted."; DesktopRecovery.tsx:81
+        [20.6, 'idea', 'Desktop recovery stops running nodes and never resubmits a provider request.'],
+        [20.6, 'focus', ['store', 'executors', 'generate']], [20.6, 'labels', { brief: ['store', 'executors', 'generate'] }],
+        // fact: electron/lib/recovery.cjs:44 checkpoint-v1.json; DesktopRecovery.tsx:76 "Restore checkpointed tabs and edits"
+        [20.8, 'tag', 'store', 'desktop: restores checkpoint', { color: 'magenta', dur: 2.0 }],
+        // fact: recovery.ts:12 "Stopped after recovery"; DesktopRecovery.tsx:80 "Interrupted generations will be stopped."
+        [21.8, 'tag', 'executors', 'running nodes: stopped', { dur: 3.0 }],
+        // fact: DesktopRecovery.tsx:81 "Recovery never submits requests."
+        [22.6, 'forbid', 'resend', { dur: 2.0 }],
+        [23.0, 'tag', 'generate', 'no request resubmitted', { color: 'red', dur: 1.9, dx: 60, dy: 40 }],
+      ],
+    },
+    {
+      id: 'decisions', short: 'Decisions', title: 'Three decisions that shape it', dur: 25, stepWord: 'DECISION',
+      // fact: decisions "Keys travel with each request" + "The server answers only this machine", "Every output is saved to a local library", "The agent edits but never starts a run"
+      idea: "The user's own keys ride each request, outputs stay on disk, and only the user starts a run.",
+      camera: { at: [1.0, 0.5, -4.0], zoom: 1.2 },
+      focus: ['executors', 'generate', 'providers'], labels: { full: ['generate'] },
+      beats: [
+        // fact: README.md:14 "Local, private, MIT, BYOK."; route.ts:125 header key || process.env; server.js:17-20 listen on this machine only
+        // fact: server.js:87-89 refuses cross-site /api calls (facts decision "The server answers only this machine")
+        [1.4, 'step', 'Local and BYOK: keys ride each request; /api answers only this app on this machine'],
+        [1.6, 'flow', 'eg', { dur: 1.5 }],
+        // fact: src/store/utils/buildApiHeaders.ts:15 gemini: "X-Gemini-API-Key"; nanoBananaExecutor.ts:112
+        [2.0, 'tag', 'executors', 'X-Gemini-API-Key header', { color: 'blue', dur: 2.4 }],
+        [3.2, 'flow', 'gp', { dur: 1.3 }],
+        // fact: server.js:58-60 "Another website open in the same browser can still send requests here"
+        [4.0, 'assemble', ['website']],
+        [4.2, 'focus', ['website', 'generate', 'executors']], [4.4, 'labels', { full: ['website'], brief: ['generate'] }],
+        // fact: server.js:87-89 cross-site /api request -> 403; src/__tests__/server.test.ts:114
+        [5.2, 'forbid', 'xsite', { dur: 2.2 }],
+        [5.6, 'tag', 'generate', 'cross-site /api call: 403', { color: 'red', dur: 2.2 }],
+        [7.8, 'lift', 'website', { dur: 1.0 }],
+        // fact: CLAUDE.md:532; src/lib/assets/client/ids.ts:2-4 client-minted ids; ingest.ts:172; recording.test.ts:146
+        [8.0, 'camera', { at: [0.4, 0.5, 2.4], zoom: 1.3, dur: 1.2 }],
+        [8.0, 'focus', ['executors', 'recorder', 'library']], [8.0, 'labels', { full: ['recorder'] }],
+        [8.2, 'step', 'Every output is saved to disk; its asset id is minted in the browser'],
+        [8.6, 'flow', 'er', { dur: 1.3 }],
+        // fact: recorder.ts:614 const assetId = newAssetId(); ids.ts:3 "put the asset id into node data together with the output"
+        [9.2, 'tag', 'recorder', 'assetId minted here', { dur: 2.2 }],
+        [10.2, 'flow', 'rl', { dur: 1.3 }], [11.5, 'write', 'library', { dur: 0.8 }],
+        // fact: recorder.ts:411 retry; :421 "An earlier attempt may have landed with only its answer lost."
+        [12.3, 'flow', 'rl', { dur: 1.3 }],
+        // fact: ingest.ts:172 "A retry of a recording that already finished gets the same answer again."; recording.test.ts:146
+        [13.4, 'tag', 'library', 'a retry gets the same record', { color: 'magenta', dur: 2.0 }],
+        // fact: CLAUDE.md:402, :406; runtime.ts:9-10; runtime.test.ts:1507, :1511 ops []
+        [15.6, 'camera', { at: [-4.6, 0.5, 0.6], zoom: 1.2, dur: 1.2 }],
+        [15.6, 'focus', ['agent', 'store']], [15.6, 'labels', { full: ['agent'] }],
+        [15.8, 'step', 'The agent edits the graph but never starts a run; the user presses Run'],
+        // fact: useAgentChat.ts:261 store.applyAgentGraphOps(batch)
+        [16.2, 'flow', 'as', { dur: 1.3 }],
+        [16.8, 'tag', 'store', 'applyAgentGraphOps', { color: 'blue', dur: 1.9 }],
+        // fact: CLAUDE.md:406 "There is no graph op for a run"; runtime.test.ts:1511 expect(result.ops).toEqual([])
+        [18.4, 'focus', ['agent', 'executors']],
+        [18.6, 'forbid', 'arun', { dur: 2.4 }],
+        // fact: CLAUDE.md:406; runtime.test.ts:1511. The tag sits on the broken link (anchor: a point on the arun arch)
+        [19.0, 'tag', 'agent', 'no graph op starts a run', { color: 'red', dur: 2.2, anchor: [-4, 0.85, -2], dy: -18 }],
+        // fact: CLAUDE.md:402 "the user does, with the chat's Run card"; AgentRunCard.tsx:216 startOfferRun
+        [21.2, 'focus', ['agent', 'user', 'store']], [21.2, 'labels', { full: ['agent'], brief: ['user'] }],
+        [21.4, 'flow', 'au', { dur: 1.2 }],
+        [21.8, 'tag', 'user', 'Run card: the user presses', { color: 'yellow', dur: 2.0, dy: 66 }],
+        // fact: runs.ts:150 void store.runBatch(scope, runs) (facts edge user -> store): the press goes straight to the store
+        [22.6, 'draw', 'us', { dur: 0.6 }],
+        [22.8, 'flow', 'us', { dur: 1.4 }],
+        [23.4, 'tag', 'store', 'runBatch(scope, runs)', { color: 'blue', dur: 1.5 }],
+      ],
+    },
+    {
+      id: 'files', short: 'Files', title: 'Reading the tree', dur: 16, tree: true,
+      // fact: facts tree; CLAUDE.md:570 "All routes in src/app/api/"
+      idea: 'src/app/api holds the routes, src/store the browser run engine, src/lib the library and agent.',
+      // shift and target move together: the scene sits right of the tree on desktop and drops below it on a phone
+      camera: { at: [13.04, 0.4, 1.8], zoom: 0.8, shift: [0.41, 0.344] },
+      focus: 'all', labels: { full: [] },
+      beats: [
+        // each row lights its modules and shows their brief labels (fact: facts tree rows)
+        [1.4, 'tree', 0], [1.4, 'labels', { brief: ['generate', 'library', 'wfile'] }],
+        [2.7, 'tree', 1], [2.7, 'labels', { brief: ['generate', 'providers'] }],
+        [4.0, 'tree', 2], [4.0, 'labels', { brief: ['library'] }],
+        [5.3, 'tree', 3], [5.3, 'labels', { brief: ['canvas', 'agent'] }],
+        [6.6, 'tree', 4], [6.6, 'labels', { brief: ['store'] }],
+        [7.9, 'tree', 5], [7.9, 'labels', { brief: ['executors'] }],
+        [9.2, 'tree', 6], [9.2, 'labels', { brief: ['recorder', 'library', 'agent'] }],
+        [10.5, 'tree', 7], [10.5, 'labels', { brief: ['recorder', 'library'] }],
+        [11.8, 'tree', 8], [11.8, 'labels', { brief: ['agent'] }],
+        [13.1, 'tree', 9], [13.1, 'labels', { full: [] }],
+        [14.4, 'tree', 10],
+      ],
+    },
+    {
+      id: 'recap', short: 'Recap', title: 'The whole system', dur: 10,
+      // fact: facts flow steps 1-9
+      idea: 'Keypress → canvas → store → executor → /api/generate → provider → AI API, then saved to disk.',
+      camera: { at: [-0.8, 0.5, -0.2], zoom: 0.92, shift: [0, 0] },
+      focus: 'all', labels: { brief: 'all' },
+      beats: [
+        // the request out (flow steps 1-6), 1.2 s a hop
+        [0.1, 'flow', ['uc', 'cs', 'se', 'eg', 'gp', 'pa'], { dur: 7.2, ease: 'none' }],
+        // then the executor saves the answer (flow steps 7 and 9)
+        [7.3, 'flow', ['er', 'rl'], { dur: 2.4, ease: 'none' }],
+        [9.0, 'write', 'library', { dur: 0.8 }],
+      ],
+    },
+  ],
+};
+
+</script>
+<script>
+/* Isometric architecture explainer engine.
+ * Reads window.SPEC (modules, pipes, chapters of beats) and plays it as one GSAP master
+ * timeline over a Three.js scene, with an HTML overlay for every piece of text.
+ * All visual state lives in plain objects that GSAP tweens; the render loop maps that
+ * state onto uniforms and transforms, so scrubbing in either direction is exact. */
+(function () {
+  'use strict';
+  var S = window.SPEC, T = window.THREE, G = window.gsap;
+  if (!T || !G || !S) {
+    document.body.insertAdjacentHTML('beforeend', '<div class="fatal">Three.js r128 or GSAP 3.12.5 did not load from cdnjs.cloudflare.com.</div>');
+    return;
+  }
+  var Q = new URLSearchParams(location.search);
+
+  // ---------- palette (meaning is fixed for the whole video) ----------
+  var HEX = { bg: '#F4F4F2', ink: '#161616', white: '#FFFFFF', grey: '#E4E4E0', mid: '#C9C9C4', dark: '#2C2C2C',
+    edge: '#1A1A1A', edgeDark: '#6A6A66', pipe: '#BDBDB7', red: '#FF2E2E', blue: '#1F5BFF', magenta: '#FF2BD6', yellow: '#FFD400' };
+  var COL = {};
+  Object.keys(HEX).forEach(function (k) { COL[k] = new T.Color(HEX[k]); });
+  var ACCENT = { red: COL.red, blue: COL.blue, magenta: COL.magenta, yellow: COL.yellow, ink: COL.ink };
+
+  // ---------- renderer, scene, iso camera ----------
+  var canvas = document.getElementById('gl');
+  var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(DPR);
+  renderer.setClearColor(COL.bg, 1);
+  renderer.sortObjects = true;
+  var scene = new T.Scene();
+  var camera = new T.OrthographicCamera(-1, 1, 1, -1, 0.1, 500);
+  var ISO = new T.Vector3(1, 1, 1).normalize(); // 45 deg on Y, 35.264 deg on X: true isometric
+  var CAM_DIST = 120;
+  var VIEW = S.view || 16;
+
+  var U = { time: { value: 0 }, px: { value: DPR }, bg: { value: COL.bg.clone() }, red: { value: COL.red.clone() } };
+
+  // ---------- shaders ----------
+  var GLSL_HASH = 'float h1(float n){ return fract(sin(n*127.1)*43758.5453); }\n';
+  var GLSL_BAYER = 'float bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }\n' +
+    'float bayer4(vec2 a){ return bayer2(0.5 * a) * 0.25 + bayer2(a); }\n';
+
+  // Module bodies: flat iso tri-tone shading, the magenta "write" dither (state kept), the red glitch (crash).
+  var MOD_VS = [
+    'uniform float uTime; uniform float uGlitch;',
+    'varying vec3 vW;', GLSL_HASH,
+    'void main(){',
+    '  vec4 wp = modelMatrix * vec4(position, 1.0);',
+    '  if (uGlitch > 0.001) {',
+    '    float band = floor(wp.y * 7.0); float tick = floor(uTime * 18.0);',
+    '    float r = h1(band * 13.7 + tick * 7.3);',
+    '    float tear = step(0.78, r) * (r - 0.78) * 3.6 * sign(h1(band + tick) - 0.5);',
+    '    wp.x += tear * uGlitch * 0.2; wp.z -= tear * uGlitch * 0.2;',
+    '  }',
+    '  vW = wp.xyz;',
+    '  gl_Position = projectionMatrix * viewMatrix * wp;',
+    '}'].join('\n');
+  var MOD_FS = [
+    'uniform vec3 uColor; uniform vec3 uBg; uniform float uMix; uniform float uTime; uniform float uPx;',
+    'uniform float uWrite; uniform float uKept; uniform vec3 uWriteCol; uniform vec2 uYR;',
+    'uniform float uGlitch; uniform vec3 uRed;',
+    'varying vec3 vW;', GLSL_HASH, GLSL_BAYER,
+    'void main(){',
+    '  vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));',
+    '  vec3 n2 = n * n;',
+    '  float shade = n2.y * (n.y > 0.0 ? 1.0 : 0.62) + n2.z * (n.z > 0.0 ? 0.925 : 0.62) + n2.x * (n.x > 0.0 ? 0.845 : 0.62);',
+    '  vec3 col = uColor * shade;',
+    '  vec2 fc = gl_FragCoord.xy / uPx;',
+    '  float hy = clamp((vW.y - uYR.x) / max(uYR.y - uYR.x, 0.001), 0.0, 1.0);',
+    '  float wact = step(0.001, uWrite) * step(uWrite, 0.999);',
+    '  float written = step(hy, uWrite) * wact;',
+    '  float dens = max(uKept * 0.30, written * 0.66);',
+    '  if (bayer4(fc) < dens) {',
+    '    float rows = step(1.0, mod(fc.y, 3.0));',
+    '    col = mix(col, uWriteCol * (0.80 + 0.20 * shade), 0.55 + 0.4 * rows);',
+    '  }',
+    '  float line = (1.0 - smoothstep(0.0, 0.04, abs(hy - uWrite))) * wact;',
+    '  col = mix(col, uWriteCol, line);',
+    '  if (uGlitch > 0.001) {',
+    '    float band = floor(fc.y / 5.0); float tick = floor(uTime * 22.0);',
+    '    float r = h1(band * 3.17 + tick * 1.31);',
+    '    float on = step(1.0 - 0.5 * uGlitch, r);',
+    '    col = mix(col, uRed * (0.72 + 0.28 * shade), clamp(uGlitch * 0.55 + on * 0.45, 0.0, 1.0));',
+    '    if (on > 0.5 && h1(band * 9.1 + tick) > 0.8) discard;',
+    '  }',
+    '  gl_FragColor = vec4(mix(uBg, col, uMix), 1.0);',
+    '}'].join('\n');
+
+  // Pipes: data in flight as pulses travelling along the tube, a packet head with a trail; red bands on an error path.
+  var PIPE_VS = 'varying vec2 vUv; varying vec3 vN;\nvoid main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+  var PIPE_FS = [
+    'uniform float uTime; uniform float uFlow; uniform float uHead; uniform float uDir; uniform float uMix; uniform float uDraw; uniform float uLen; uniform float uRed;',
+    'uniform vec3 uBase; uniform vec3 uCol; uniform vec3 uBg; uniform vec3 uRedC;',
+    'varying vec2 vUv; varying vec3 vN;',
+    'void main(){',
+    '  if (vUv.x > uDraw) discard;',
+    '  float s = vUv.x * uLen;',
+    '  float k = fract(s * 1.25 - uTime * 1.9 * (uDir < 0.0 ? -1.0 : 1.0));',
+    '  float dash = smoothstep(0.0, 0.06, k) * (1.0 - smoothstep(0.22, 0.30, k));',
+    '  float head = 0.0;',
+    '  if (uHead > -0.5) { float d = (vUv.x - uHead) * uLen * uDir; head = exp(-d * d * 7.0) + step(d, 0.0) * exp(d * 1.3) * 0.55; }',
+    '  vec3 n = normalize(vN);',
+    '  float shade = 0.80 + 0.20 * clamp(n.y, 0.0, 1.0) + 0.06 * clamp(n.z, 0.0, 1.0);',
+    '  vec3 col = uBase * shade;',
+    '  col = mix(col, uCol, clamp(uFlow * (0.20 + 0.55 * dash) + head * uFlow, 0.0, 1.0));',
+    '  if (uRed > 0.001) {',
+    '    float b = step(0.5, fract(s * 2.4 - uTime * 5.0));',
+    '    float jit = fract(sin(floor(s * 6.0) * 91.3 + floor(uTime * 20.0)) * 4375.85);',
+    '    col = mix(col, uRedC, uRed * (0.55 + 0.45 * b));',
+    '    if (uRed > 0.5 && jit > 0.86) discard;',
+    '  }',
+    '  gl_FragColor = vec4(mix(uBg, col, uMix), 1.0);',
+    '}'].join('\n');
+
+  var FLAT_VS = 'varying vec2 vUv;\nvoid main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+  var SHADOW_FS = [
+    'uniform vec2 uHalf; uniform vec2 uSize; uniform float uSoft; uniform float uStr; uniform float uMix; uniform float uRound;',
+    'varying vec2 vUv;',
+    'float sdBox(vec2 p, vec2 b){ vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }',
+    'void main(){',
+    '  vec2 p = (vUv - 0.5) * uSize;',
+    '  float d = mix(sdBox(p, uHalf), length(p) - uHalf.x, uRound);',
+    '  float a = (1.0 - smoothstep(-0.08, uSoft, d)) * uStr * uMix;',
+    '  gl_FragColor = vec4(0.0, 0.0, 0.0, a);',
+    '}'].join('\n');
+  var RING_FS = [
+    'uniform vec2 uHalf; uniform vec2 uSize; uniform float uA; uniform vec3 uCol;',
+    'varying vec2 vUv;',
+    'void main(){',
+    '  vec2 p = abs((vUv - 0.5) * uSize); vec2 b = uHalf; float w = 0.055; float L = min(0.55, min(b.x, b.y) * 0.8);',
+    '  float aa = fwidth(p.x) + fwidth(p.y);',
+    '  float inX = 1.0 - smoothstep(b.x - aa, b.x + aa, p.x); float inY = 1.0 - smoothstep(b.y - aa, b.y + aa, p.y);',
+    '  float edgeY = smoothstep(b.y - w - aa, b.y - w + aa, p.y) * inY * smoothstep(b.x - L - aa, b.x - L + aa, p.x) * inX;',
+    '  float edgeX = smoothstep(b.x - w - aa, b.x - w + aa, p.x) * inX * smoothstep(b.y - L - aa, b.y - L + aa, p.y) * inY;',
+    '  float m = max(edgeX, edgeY) * uA;',
+    '  if (m < 0.01) discard;',
+    '  gl_FragColor = vec4(uCol, m);',
+    '}'].join('\n');
+  var HALO_FS = 'uniform vec3 uCol; uniform float uA; varying vec2 vUv;\nvoid main(){ float d = length(vUv - 0.5) * 2.0; float a = pow(max(1.0 - d, 0.0), 2.4) * uA; gl_FragColor = vec4(uCol, a * 0.8); }';
+  var FLOOR_VS = 'varying vec3 vW;\nvoid main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vW = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }';
+  var FLOOR_FS = [
+    'uniform vec3 uBg; uniform vec3 uLine; uniform vec3 uLine2; uniform vec2 uC;',
+    'varying vec3 vW;',
+    'float grid(vec2 p, float sc){ vec2 q = p / sc; vec2 g = abs(fract(q - 0.5) - 0.5) / fwidth(q); return 1.0 - min(min(g.x, g.y), 1.0); }',
+    'void main(){',
+    '  float fade = 1.0 - smoothstep(9.0, 30.0, length(vW.xz - uC));',
+    '  vec3 c = mix(uBg, uLine, grid(vW.xz, 1.0) * 0.55 * fade);',
+    '  c = mix(c, uLine2, grid(vW.xz, 4.0) * 0.55 * fade);',
+    '  gl_FragColor = vec4(c, 1.0);',
+    '}'].join('\n');
+
+  // ---------- shared geometry (built once) ----------
+  var GEO = {
+    box: new T.BoxGeometry(1, 1, 1),
+    cyl: new T.CylinderGeometry(0.5, 0.5, 1, 32, 1),
+    ico: new T.IcosahedronGeometry(0.5, 1),
+    plane: new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    quad: new T.PlaneGeometry(1, 1),
+    packet: new T.BoxGeometry(0.17, 0.17, 0.17)
+  };
+  GEO.boxE = new T.EdgesGeometry(GEO.box);
+  (function () {
+    var rings = new T.EdgesGeometry(GEO.cyl, 30).attributes.position.array;
+    var s = Math.SQRT1_2 * 0.5; // silhouette of a vertical cylinder seen from the iso direction
+    var sil = [-s, -0.5, s, -s, 0.5, s, s, -0.5, -s, s, 0.5, -s];
+    var arr = new Float32Array(rings.length + sil.length);
+    arr.set(rings, 0); arr.set(sil, rings.length);
+    GEO.cylE = new T.BufferGeometry();
+    GEO.cylE.setAttribute('position', new T.BufferAttribute(arr, 3));
+  })();
+
+  function modMaterial(color) {
+    return new T.ShaderMaterial({
+      vertexShader: MOD_VS, fragmentShader: MOD_FS, extensions: { derivatives: true },
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+      uniforms: {
+        uColor: { value: color.clone() }, uBg: U.bg, uMix: { value: 1 }, uTime: U.time, uPx: U.px,
+        uWrite: { value: 0 }, uKept: { value: 0 }, uWriteCol: { value: COL.magenta.clone() }, uYR: { value: new T.Vector2(0, 1) },
+        uGlitch: { value: 0 }, uRed: U.red
+      }
+    });
+  }
+
+  // ---------- floor ----------
+  var floorMat = new T.ShaderMaterial({ vertexShader: FLOOR_VS, fragmentShader: FLOOR_FS, extensions: { derivatives: true },
+    uniforms: { uBg: U.bg, uLine: { value: new T.Color('#E6E6E1') }, uLine2: { value: new T.Color('#DADAD4') }, uC: { value: new T.Vector2() } } });
+  var floor = new T.Mesh(new T.PlaneGeometry(220, 220).rotateX(-Math.PI / 2), floorMat);
+  floor.renderOrder = -2;
+  scene.add(floor);
+
+  // ---------- modules ----------
+  var MODS = {}, MOD_LIST = [];
+  var TONES = { white: COL.white, grey: COL.grey, mid: COL.mid, dark: COL.dark, magenta: COL.magenta, yellow: COL.yellow };
+
+  function Module(m) {
+    var self = this;
+    this.m = m; this.id = m.id; this.kind = m.kind || 'block';
+    var size = m.size || [2, 1, 2];
+    this.w = size[0]; this.h = size[1]; this.d = size[2];
+    this.x = m.at[0]; this.z = m.at[1]; this.y = m.y || 0;
+    this.root = new T.Group(); this.root.position.set(this.x, this.y, this.z);
+    scene.add(this.root);
+    this.parts = []; this.mats = {}; this.shelves = []; this.pages = [];
+    this.edgeBase = this.kind === 'external' ? COL.edgeDark : COL.edge;
+    this.edgeMat = new T.LineBasicMaterial({ color: this.edgeBase.clone() });
+    this.s = { e: 0, lift: 0, dim: 1, ring: 0, la: 0, lf: 1, write: 0, kept: m.kept || 0, glitch: 0, open: 0, pages: m.slots || 5, pull: [] };
+    this.mat = function (tone) {
+      if (!self.mats[tone]) {
+        var mt = modMaterial(TONES[tone] || COL.white);
+        mt.uniforms.uYR.value.set(self.y, self.y + self.h);
+        self.mats[tone] = mt;
+      }
+      return self.mats[tone];
+    };
+    BUILD[this.kind in BUILD ? this.kind : 'block'](this, m);
+    if (m.axis === 'z') { this.root.rotation.y = Math.PI / 2; var tw = this.w; this.w = this.d; this.d = tw; }
+    this.top = this.kind === 'log' ? 0.08 + (this.pages.length) * 0.14 : this.h;
+    // contact shadow
+    var round = this.kind === 'store' || this.kind === 'person';
+    var fw = round ? Math.min(this.w, this.d) : this.w, fd = round ? Math.min(this.w, this.d) : this.d;
+    var soft = 0.55 + this.y * 0.25;
+    this.shadowMat = new T.ShaderMaterial({ vertexShader: FLAT_VS, fragmentShader: SHADOW_FS, transparent: true, depthWrite: false,
+      uniforms: { uHalf: { value: new T.Vector2(fw / 2, fd / 2) }, uSize: { value: new T.Vector2(fw + soft * 2 + 0.4, fd + soft * 2 + 0.4) },
+        uSoft: { value: soft }, uStr: { value: this.y > 0 ? 0.10 : 0.20 }, uMix: { value: 1 }, uRound: { value: round ? 1 : 0 } } });
+    this.shadow = new T.Mesh(GEO.plane, this.shadowMat);
+    this.shadow.scale.set(fw + soft * 2 + 0.4, 1, fd + soft * 2 + 0.4);
+    this.shadow.position.set(this.x + 0.1, 0.004, this.z + 0.1);
+    this.shadow.renderOrder = -1;
+    scene.add(this.shadow);
+    // focus brackets (yellow = active focus)
+    var rw = this.w + 0.7, rd = this.d + 0.7;
+    this.ringMat = new T.ShaderMaterial({ vertexShader: FLAT_VS, fragmentShader: RING_FS, transparent: true, depthWrite: false, extensions: { derivatives: true },
+      uniforms: { uHalf: { value: new T.Vector2(rw / 2, rd / 2) }, uSize: { value: new T.Vector2(rw + 0.1, rd + 0.1) }, uA: { value: 0 }, uCol: { value: COL.yellow.clone() } } });
+    this.ring = new T.Mesh(GEO.plane, this.ringMat);
+    this.ring.scale.set(rw + 0.1, 1, rd + 0.1);
+    this.ring.position.set(this.x, 0.008, this.z);
+    this.ring.renderOrder = 0;
+    scene.add(this.ring);
+    this.anchor = new T.Vector3(this.x, this.y + this.top + 0.05, this.z);
+  }
+  Module.prototype.part = function (tone, geo, sx, sy, sz, px, py, pz, off, opts) {
+    opts = opts || {};
+    var g = new T.Group();
+    var mesh = new T.Mesh(GEO[geo], this.mat(tone));
+    g.add(mesh);
+    if (opts.edges !== false && GEO[geo + 'E']) g.add(new T.LineSegments(GEO[geo + 'E'], this.edgeMat));
+    g.scale.set(sx, sy, sz);
+    g.position.set(px, py, pz);
+    var holder = opts.parent || this.root;
+    holder.add(g);
+    var p = { g: g, base: new T.Vector3(px, py, pz), off: new T.Vector3(off[0], off[1], off[2]), seq: opts.seq !== undefined ? opts.seq : this.parts.length };
+    if (opts.track !== false) this.parts.push(p);
+    return p;
+  };
+
+  var BUILD = {
+    block: function (M, m) {
+      var w = M.w, h = M.h, d = M.d, body = m.tone || 'white';
+      M.part('grey', 'box', w + 0.2, 0.1, d + 0.2, 0, 0.05, 0, [0, 0, 3.2]);
+      M.part(body, 'box', w, h - 0.16, d, 0, 0.1 + (h - 0.16) / 2, 0, [0, 3.4, 0]);
+      M.part('grey', 'box', w * 0.7, 0.06, d * 0.7, 0, h - 0.03, 0, [0, 5.2, 0]);
+      if (h > 0.7 && m.vent !== false) M.part('dark', 'box', Math.min(w * 0.42, 1.2), 0.05, 0.02, -w * 0.18, 0.1 + (h - 0.16) * 0.62, d / 2 + 0.011, [0, 3.4, 0], { edges: false, seq: 1 });
+    },
+    external: function (M, m) {
+      var w = M.w, h = M.h, d = M.d;
+      M.part('grey', 'box', w + 0.2, 0.1, d + 0.2, 0, 0.05, 0, [-3.2, 0, 0]);
+      M.part('dark', 'box', w, h - 0.1, d, 0, 0.1 + (h - 0.1) / 2, 0, [0, 3.4, 0]);
+      M.part('mid', 'box', w * 0.5, 0.05, 0.02, -w * 0.12, h * 0.66, d / 2 + 0.011, [0, 3.4, 0], { edges: false, seq: 1 });
+    },
+    housing: function (M, m) {
+      var w = M.w, h = M.h, d = M.d;
+      M.part('grey', 'box', w + 0.24, 0.12, d + 0.24, 0, 0.06, 0, [0, 0, 4]);
+      M.part('white', 'box', w, h - 0.12, d, 0, 0.12 + (h - 0.12) / 2, 0, [0, 5, 0]);
+      M.part('grey', 'box', w * 0.86, 0.05, d * 0.86, 0, h + 0.025, 0, [0, 7, 0]);
+      M.part('dark', 'box', w * 0.3, 0.05, 0.02, -w * 0.25, h * 0.7, d / 2 + 0.011, [0, 5, 0], { edges: false, seq: 1 });
+    },
+    plate: function (M, m) {
+      var w = M.w, h = M.h, d = M.d, y = M.y;
+      if (y > 0.2) {
+        var lx = w / 2 - 0.25, lz = d / 2 - 0.25;
+        [[-lx, -lz], [lx, -lz], [-lx, lz], [lx, lz]].forEach(function (q) {
+          M.part('mid', 'box', 0.1, y, 0.1, q[0], -y / 2, q[1], [0, 0, 0], { seq: 0 });
+        });
+      }
+      M.part('grey', 'box', w, h * 0.55, d, 0, h * 0.275, 0, [-3.6, 0, 0], { seq: 1 });
+      M.part(m.tone || 'white', 'box', w - 0.3, h * 0.45, d - 0.3, 0, h * 0.55 + h * 0.225, 0, [-5.4, 0, 0], { seq: 2 });
+    },
+    rack: function (M, m) {
+      var w = M.w, h = M.h, d = M.d, n = Math.max(1, m.slots || (m.children ? m.children.length : 5));
+      M.part('grey', 'box', w + 0.16, 0.08, d + 0.16, 0, 0.04, 0, [0, 0, 3.2]);
+      M.part('dark', 'box', 0.1, h, d, -w / 2 + 0.05, h / 2, 0, [0, 4.2, 0]);
+      M.part('dark', 'box', 0.1, h, d, w / 2 - 0.05, h / 2, 0, [0, 4.2, 0]);
+      var pitch = (h - 0.16) / n, sh = pitch * 0.66;
+      for (var i = 0; i < n; i++) {
+        var p = M.part(m.tone || 'white', 'box', w - 0.24, sh, d - 0.14, 0, 0.08 + pitch * (i + 0.5), 0, [0, 0, 3.6 + i * 0.3]);
+        M.shelves.push(p); M.s.pull.push(0);
+      }
+      M.part('grey', 'box', w + 0.04, 0.08, d + 0.04, 0, h - 0.04, 0, [0, 5.4, 0]);
+    },
+    store: function (M, m) {
+      var r = Math.min(M.w, M.d), h = M.h;
+      M.part('grey', 'cyl', r * 1.12, 0.08, r * 1.12, 0, 0.04, 0, [0, 0, 3.2]);
+      var avail = h - 0.08 - 0.05, gap = 0.05, dh = (avail - 2 * gap) / 3;
+      for (var i = 0; i < 3; i++) M.part(m.tone || 'white', 'cyl', r, dh, r, 0, 0.08 + i * (dh + gap) + dh / 2, 0, [0, 3 + i * 0.9, 0]);
+      M.part('magenta', 'cyl', r * 0.62, 0.05, r * 0.62, 0, h - 0.025, 0, [0, 6, 0]);
+    },
+    log: function (M, m) {
+      var w = M.w, d = M.d, n = m.slots || 5, extra = m.grow || 6;
+      M.part('grey', 'box', w + 0.16, 0.08, d + 0.16, 0, 0.04, 0, [0, 0, 3.2]);
+      for (var i = 0; i < n + extra; i++) {
+        var y = 0.08 + i * 0.14 + 0.055;
+        var pg = M.part('white', 'box', w, 0.11, d, 0, y, 0, [0, 3 + i * 0.35, 0], { track: i < n });
+        var tab = M.part('magenta', 'box', 0.05, 0.11, d * 0.34, w / 2 + 0.025, 0, d * 0.22, [0, 0, 0], { parent: pg.g, track: false, edges: false });
+        tab.g.scale.set(0.05 / w, 1, 0.34);
+        tab.g.position.set(0.5 + 0.025 / w, 0, 0.22);
+        if (i >= n) pg.g.visible = false;
+        M.pages.push(pg);
+      }
+      M.h = 0.08 + (n + extra) * 0.14;
+      M.s.pages = n;
+      M.nPages0 = n;
+    },
+    gate: function (M, m) {
+      var w = M.w, h = M.h, d = M.d;
+      M.part('grey', 'box', w, 0.08, d, 0, 0.04, 0, [0, 0, 3.2]);
+      M.part('dark', 'box', 0.16, h, 0.16, -w / 2 + 0.08, h / 2, 0, [0, 4, 0]);
+      M.part('dark', 'box', 0.14, h * 0.62, 0.14, w / 2 - 0.08, h * 0.31, 0, [0, 4, 0]);
+      M.pivot = new T.Group();
+      M.pivot.position.set(-w / 2 + 0.08, h * 0.66, 0);
+      M.root.add(M.pivot);
+      var arm = M.part('yellow', 'box', w - 0.12, 0.12, 0.12, (w - 0.12) / 2, 0, 0, [0, 4.6, 0], { parent: M.pivot });
+      M.arm = arm;
+    },
+    person: function (M, m) {
+      M.part('grey', 'cyl', 0.72, 0.06, 0.72, 0, 0.03, 0, [0, 0, 3]);
+      M.part('yellow', 'cyl', 0.36, 0.52, 0.36, 0, 0.06 + 0.26, 0, [0, 3.2, 0]);
+      M.part('yellow', 'ico', 0.34, 0.34, 0.34, 0, 0.06 + 0.52 + 0.21, 0, [0, 4.4, 0], { edges: false });
+      M.h = 0.95;
+    }
+  };
+
+  (S.modules || []).forEach(function (m) { var M = new Module(m); MODS[m.id] = M; MOD_LIST.push(M); });
+
+  // ---------- pipes ----------
+  var PIPES = {}, PIPE_LIST = [];
+  function modPort(M, y) { return new T.Vector3(M.x, y, M.z); }
+  function roundedPath(pts, radius) {
+    var path = new T.CurvePath();
+    var cur = pts[0].clone();
+    for (var i = 1; i < pts.length; i++) {
+      var a = pts[i - 1], b = pts[i], c = pts[i + 1];
+      if (!c) { path.add(new T.LineCurve3(cur.clone(), b.clone())); break; }
+      var d1 = b.clone().sub(a), d2 = c.clone().sub(b);
+      var r = Math.min(radius, d1.length() / 2, d2.length() / 2);
+      d1.normalize(); d2.normalize();
+      var p1 = b.clone().addScaledVector(d1, -r), p2 = b.clone().addScaledVector(d2, r);
+      if (p1.distanceTo(cur) > 1e-4) path.add(new T.LineCurve3(cur.clone(), p1));
+      if (r > 1e-4 && d1.dot(d2) < 0.999) path.add(new T.QuadraticBezierCurve3(p1.clone(), b.clone(), p2.clone()));
+      cur = p2;
+    }
+    return path;
+  }
+  function exitPoint(M, pts) {
+    // walk the polyline from the module centre and return where it leaves the footprint, with its direction
+    var round = M.kind === 'store' || M.kind === 'person';
+    var hx = M.w / 2 + 0.02, hz = M.d / 2 + 0.02, r = Math.min(M.w, M.d) / 2 + 0.02;
+    var inside = function (q) { return round ? Math.hypot(q.x - M.x, q.z - M.z) < r : Math.abs(q.x - M.x) < hx && Math.abs(q.z - M.z) < hz; };
+    for (var i = 0; i + 1 < pts.length; i++) {
+      var a = pts[i], b = pts[i + 1];
+      if (!inside(a)) return null;
+      if (inside(b)) continue;
+      var lo = 0, hi = 1, q = new T.Vector3();
+      for (var k = 0; k < 24; k++) { var mid = (lo + hi) / 2; q.copy(a).lerp(b, mid); if (inside(q)) lo = mid; else hi = mid; }
+      q.copy(a).lerp(b, hi);
+      return { p: q, along: Math.abs(b.x - a.x) > Math.abs(b.z - a.z) ? 'x' : 'z' };
+    }
+    return null;
+  }
+  function Pipe(p) {
+    this.p = p; this.id = p.id;
+    var A = MODS[p.from], B = MODS[p.to];
+    if (!A || !B) throw new Error('pipe ' + p.id + ' needs modules ' + p.from + ' and ' + p.to);
+    this.A = A; this.B = B;
+    var ya = p.y !== undefined ? p.y : Math.min(0.42, A.top * 0.5) + A.y;
+    var yb = p.y !== undefined ? p.y : Math.min(0.42, B.top * 0.5) + B.y;
+    var pts = [modPort(A, ya)];
+    if (p.via) {
+      p.via.forEach(function (v) { pts.push(v.length === 3 ? new T.Vector3(v[0], v[1], v[2]) : new T.Vector3(v[0], ya, v[1])); });
+      var last = pts[pts.length - 1];
+      if (Math.abs(last.x - B.x) > 1e-3 || Math.abs(last.z - B.z) > 1e-3) pts.push(new T.Vector3(B.x, last.y, B.z));
+      if (Math.abs(pts[pts.length - 1].y - yb) > 1e-3) pts.push(modPort(B, yb));
+    } else {
+      var bend = p.bend || 'xz';
+      var end = modPort(B, yb);
+      if (Math.abs(ya - yb) > 1e-3) {
+        if (Math.abs(A.x - B.x) > 1e-3 || Math.abs(A.z - B.z) > 1e-3) {
+          if (bend === 'xz') { pts.push(new T.Vector3(B.x, ya, A.z)); if (Math.abs(A.z - B.z) > 1e-3) pts.push(new T.Vector3(B.x, ya, B.z)); }
+          else { pts.push(new T.Vector3(A.x, ya, B.z)); if (Math.abs(A.x - B.x) > 1e-3) pts.push(new T.Vector3(B.x, ya, B.z)); }
+          pts[pts.length - 1] = new T.Vector3(B.x, ya, B.z);
+        }
+      } else if (Math.abs(A.x - B.x) > 1e-3 && Math.abs(A.z - B.z) > 1e-3) {
+        pts.push(bend === 'xz' ? new T.Vector3(B.x, ya, A.z) : new T.Vector3(A.x, ya, B.z));
+      }
+      pts.push(end);
+    }
+    // de-duplicate consecutive points
+    pts = pts.filter(function (q, i) { return i === 0 || q.distanceTo(pts[i - 1]) > 1e-3; });
+    this.path = roundedPath(pts, 0.35);
+    this.len = this.path.getLength();
+    var segs = Math.max(24, Math.ceil(this.len * 14));
+    var geo = new T.TubeGeometry(this.path, segs, p.r || 0.06, 8, false);
+    this.mat = new T.ShaderMaterial({ vertexShader: PIPE_VS, fragmentShader: PIPE_FS,
+      uniforms: { uTime: U.time, uFlow: { value: 0 }, uHead: { value: -1 }, uDir: { value: 1 }, uMix: { value: 1 }, uDraw: { value: 0 }, uLen: { value: this.len },
+        uRed: { value: 0 }, uBase: { value: COL.pipe.clone() }, uCol: { value: COL.blue.clone() }, uBg: U.bg, uRedC: U.red } });
+    this.mesh = new T.Mesh(geo, this.mat);
+    scene.add(this.mesh);
+    // lookup table for packets
+    this.lut = [];
+    for (var i = 0; i <= 160; i++) this.lut.push(this.path.getPointAt(i / 160));
+    // flanges where the pipe leaves and enters a module
+    this.collars = [];
+    this.collarMat = modMaterial(COL.mid);
+    this.collarEdge = new T.LineBasicMaterial({ color: COL.edge.clone() });
+    var ea = exitPoint(A, pts), eb = exitPoint(B, pts.slice().reverse());
+    var self = this;
+    [ea, eb].forEach(function (hit) {
+      if (!hit) { self.collars.push(null); return; }
+      var g = new T.Group();
+      g.add(new T.Mesh(GEO.box, self.collarMat));
+      g.add(new T.LineSegments(GEO.boxE, self.collarEdge));
+      if (hit.along === 'x') g.scale.set(0.07, 0.26, 0.26); else g.scale.set(0.26, 0.26, 0.07);
+      g.position.copy(hit.p);
+      scene.add(g); self.collars.push(g);
+    });
+    this.s = { draw: p.drawn ? 1 : 0, red: 0, stream: 0, a: p.forbidden ? 0 : 1 };
+    this.flowNow = 0; this.headNow = -1; this.dirNow = 1; this.colNow = COL.blue;
+  }
+  Pipe.prototype.pointAt = function (u) {
+    var f = Math.max(0, Math.min(1, u)) * 160, i = Math.floor(f), t = f - i;
+    if (i >= 160) return this.lut[160];
+    return this._tmp.copy(this.lut[i]).lerp(this.lut[i + 1], t);
+  };
+  Pipe.prototype._tmp = null;
+  (S.pipes || []).forEach(function (p) { var P = new Pipe(p); P._tmp = new T.Vector3(); PIPES[p.id] = P; PIPE_LIST.push(P); });
+
+  // ---------- packets (fixed pool; packet records are created at timeline build time) ----------
+  var POOL = [], PACKETS = [];
+  for (var pi = 0; pi < 18; pi++) {
+    var core = new T.Mesh(GEO.packet, new T.MeshBasicMaterial({ color: COL.blue.clone() }));
+    var halo = new T.Mesh(GEO.quad, new T.ShaderMaterial({ vertexShader: FLAT_VS, fragmentShader: HALO_FS, transparent: true, depthWrite: false,
+      uniforms: { uCol: { value: COL.blue.clone() }, uA: { value: 0 } } }));
+    halo.scale.set(0.95, 0.95, 0.95);
+    halo.renderOrder = 3;
+    core.visible = halo.visible = false;
+    scene.add(core); scene.add(halo);
+    POOL.push({ core: core, halo: halo });
+  }
+
+  // ---------- overlay ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var svg = $('leaders'), labelsEl = $('labels'), treeEl = $('tree');
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function fmtCoord(v) { var r = Math.round(v * 10) / 10; return (r === 0 ? 0 : r); }
+  function kindColor(M) {
+    if (M.kind === 'store' || M.kind === 'log') return HEX.magenta;
+    if (M.kind === 'gate' || M.kind === 'person') return HEX.yellow;
+    if (M.kind === 'external') return HEX.dark;
+    return HEX.ink;
+  }
+
+  MOD_LIST.forEach(function (M) {
+    var m = M.m;
+    var L = el('div', 'lbl');
+    var sy = m.symbol ? '<div class="sy ' + (m.symbolKind || '') + '">' + esc(m.symbol) + '</div>' : '';
+    var code = '';
+    if (m.code && m.code.length) {
+      var start = m.codeLine || 0;
+      code = '<pre>' + m.code.map(function (ln, i) { return (start ? '<span class="ln">' + (start + i) + '</span>' : '') + esc(ln); }).join('\n') + '</pre>';
+    }
+    L.innerHTML = '<div class="nm"><span class="k" style="background:' + kindColor(M) + '"></span>' + esc(m.name || m.id) +
+      (m.inferred ? '<span class="inf">INFERRED</span>' : '') + '<span class="bp">' + esc(m.path || '') + '</span></div>' +
+      '<div class="detail">' + (m.path ? '<div class="pt">' + esc(m.path) + (m.codeAt ? '' : '') + '</div>' : '') +
+      (m.owns ? '<div class="ow">' + esc(m.owns) + '</div>' : '') + sy + code + '</div>';
+    labelsEl.appendChild(L);
+    var C = el('div', 'coord', '[x:' + fmtCoord(M.x) + ' y:' + fmtCoord(M.y) + ' z:' + fmtCoord(M.z) + ']');
+    labelsEl.appendChild(C);
+    var line = document.createElementNS(NS, 'line'); svg.appendChild(line);
+    var dot = document.createElementNS(NS, 'circle'); dot.setAttribute('r', '2'); svg.appendChild(dot);
+    M.L = { el: L, coord: C, line: line, dot: dot, wF: 0, hF: 0, wB: 0, hB: 0, x: 0, y: 0, shown: false, brief: false, a: 0 };
+  });
+  var treeLine = document.createElementNS(NS, 'line'); treeLine.setAttribute('class', 'tree'); svg.appendChild(treeLine);
+  var treeDot = document.createElementNS(NS, 'circle'); treeDot.setAttribute('r', '3'); treeDot.setAttribute('class', 'focus'); svg.appendChild(treeDot);
+
+  // legend + corners
+  $('legend').innerHTML = [['red', 'failure · crash · error path'], ['blue', 'data · messages in flight'], ['magenta', 'state that is kept'], ['yellow', 'human · approval · focus']]
+    .map(function (r) { return '<div><i style="background:' + HEX[r[0]] + '"></i>' + r[0] + '</div><span>' + r[1] + '</span>'; }).join('');
+  $('c-br').innerHTML = '<b>' + esc(S.repo.slug || S.repo.name) + '</b> @ ' + esc(S.repo.commit) + (S.repo.branch ? '<span class="br"><br>' + esc(S.repo.branch) + '</span>' : '');
+
+  // file tree
+  var TREE_ROWS = [];
+  if (S.tree && S.tree.length) {
+    treeEl.appendChild(el('div', 'hd', esc((S.repo.name || '') + '/') + ' &nbsp;how to read the tree'));
+    S.tree.forEach(function (r) {
+      var row = el('div', 'row', '<span class="p" style="padding-left:' + ((r.depth || 0) * 14) + 'px">' + esc(r.show || r.path) + '</span><span class="n">' + esc(r.note || '') + '</span>');
+      treeEl.appendChild(row); TREE_ROWS.push(row);
+    });
+  }
+
+  // ---------- timeline construction ----------
+  var cam = { x: 0, y: 0, z: 0, zoom: 1, sx: 0, sy: 0 };
+  var master = G.timeline({ paused: true });
+  var CH = [], IDEAS = [], STEPS = [], TREEV = [], TAGS = [];
+  var easeAsm = G.parseEase('expo.out'), easeIn = G.parseEase('expo.in');
+
+  function ids(list) {
+    if (list === 'all') return MOD_LIST.map(function (M) { return M.id; });
+    if (list === 'none' || !list) return [];
+    return Array.isArray(list) ? list : [list];
+  }
+  function txt(v) { return typeof v === 'string' ? { text: v, inferred: /^INFERRED[:\s]/.test(v) ? true : false } : v; }
+  function camVals(c) {
+    var v = {};
+    if (c.at) { v.x = c.at[0]; v.y = c.at[1]; v.z = c.at[2]; }
+    if (c.zoom !== undefined) v.zoom = c.zoom;
+    if (c.shift) { v.sx = c.shift[0]; v.sy = c.shift[1]; }
+    return v;
+  }
+  function focusTween(tl, at, list, opts) {
+    opts = opts || {};
+    var on = {};
+    ids(list).forEach(function (id) { on[id] = 1; });
+    var all = list === 'all';
+    var ring = opts.ring !== undefined ? opts.ring : (!all && ids(list).length <= 3);
+    MOD_LIST.forEach(function (M) {
+      tl.to(M.s, { dim: all || on[M.id] ? 1 : 0.2, ring: ring && on[M.id] ? 1 : 0, duration: opts.dur || 0.5, ease: 'power2.out' }, at);
+    });
+  }
+  function labelTween(tl, at, spec) {
+    var full = {}, brief = {};
+    ids(spec.full).forEach(function (id) { full[id] = 1; });
+    ids(spec.brief).forEach(function (id) { brief[id] = 1; });
+    MOD_LIST.forEach(function (M) {
+      var show = full[M.id] || brief[M.id] ? 1 : 0;
+      tl.to(M.s, { la: show, duration: 0.35, ease: 'power2.out' }, at);
+      tl.set(M.s, { lf: full[M.id] ? 1 : 0 }, at + (show ? 0 : 0.35));
+    });
+  }
+  function makeTag(id, text, o) {
+    var M = MODS[id];
+    var t = el('div', 'tag ' + (o.color || ''), esc(text));
+    labelsEl.appendChild(t);
+    var rec = { M: M, el: t, s: { a: 0 }, dx: o.dx || 0, dy: o.dy !== undefined ? o.dy : -30, at: o.anchor || null, w: 0, h: 0, slot: o.slot };
+    TAGS.push(rec);
+    return rec;
+  }
+
+  var BEATS = {
+    assemble: function (tl, t, b) {
+      var list = ids(b[0]), o = b[1] || {};
+      list.forEach(function (id, i) {
+        var M = MODS[id];
+        tl.fromTo(M.s, { e: 0 }, { e: 1, duration: o.dur || 1.15, ease: 'none', immediateRender: false }, t + i * (o.stagger !== undefined ? o.stagger : 0.32));
+      });
+    },
+    lift: function (tl, t, b) {
+      var M = MODS[b[0]], o = b[1] || {};
+      tl.fromTo(M.s, { lift: 0 }, { lift: 1, duration: o.dur || 1.3, ease: 'none', immediateRender: false }, t);
+    },
+    focus: function (tl, t, b) { focusTween(tl, t, b[0], b[1]); },
+    labels: function (tl, t, b) { labelTween(tl, t, b[0]); },
+    draw: function (tl, t, b) {
+      var o = b[1] || {};
+      var list = b[0] === 'all' ? PIPE_LIST.filter(function (P) { return !P.p.forbidden; }).map(function (P) { return P.id; }) : (Array.isArray(b[0]) ? b[0] : [b[0]]);
+      list.forEach(function (id, i) {
+        tl.fromTo(PIPES[id].s, { draw: 0 }, { draw: 1, duration: o.dur || 0.8, ease: 'power3.inOut', immediateRender: false }, t + i * (o.stagger !== undefined ? o.stagger : 0.12));
+      });
+    },
+    flow: function (tl, t, b) {
+      var seq = (Array.isArray(b[0]) ? b[0] : [b[0]]).map(function (id) {
+        var rev = id.charAt(0) === '-'; var P = PIPES[rev ? id.slice(1) : id];
+        return { P: P, rev: rev };
+      });
+      var o = b[1] || {};
+      var total = seq.reduce(function (a, q) { return a + q.P.len; }, 0);
+      var rec = { seq: seq, total: total, s: { t: o.from || 0, a: 0, red: 0 }, color: ACCENT[o.color || 'blue'] || COL.blue };
+      PACKETS.push(rec);
+      var dur = o.dur || Math.max(0.9, total * 0.32);
+      tl.set(rec.s, { t: o.from || 0 }, t);
+      tl.to(rec.s, { a: 1, duration: 0.15 }, t);
+      tl.fromTo(rec.s, { t: o.from || 0 }, { t: o.to !== undefined ? o.to : 1, duration: dur, ease: o.ease || 'power1.inOut', immediateRender: false }, t);
+      if (o.die) {
+        tl.to(rec.s, { red: 1, duration: 0.12 }, t + dur);
+        tl.to(rec.s, { a: 0, duration: 0.5, ease: 'power2.in' }, t + dur + 0.35);
+      } else {
+        tl.to(rec.s, { a: 0, duration: 0.25 }, t + dur + (o.hold || 0.05));
+      }
+    },
+    stream: function (tl, t, b) {
+      var P = PIPES[b[0]], o = b[1] || {};
+      tl.to(P.s, { stream: o.level || 1, duration: 0.4 }, t);
+      tl.to(P.s, { stream: 0, duration: 0.4 }, t + (o.dur || 3));
+    },
+    write: function (tl, t, b) {
+      var M = MODS[b[0]], o = b[1] || {};
+      var dur = o.dur || 1.0;
+      tl.fromTo(M.s, { write: 0.0001 }, { write: 0.9999, duration: dur, ease: 'power2.inOut', immediateRender: false }, t);
+      tl.set(M.s, { write: 0 }, t + dur + 0.02);
+      tl.to(M.s, { kept: Math.min(1, (o.kept !== undefined ? o.kept : 1)), duration: 0.4 }, t + dur * 0.6);
+      if (M.kind === 'log') tl.to(M.s, { pages: '+=1', duration: 0.55, ease: 'none' }, t);
+    },
+    crash: function (tl, t, b) {
+      var M = MODS[b[0]], o = b[1] || {};
+      tl.to(M.s, { glitch: 1, duration: 0.12, ease: 'power4.out' }, t);
+      if (o.dur) tl.to(M.s, { glitch: 0, duration: 0.3 }, t + o.dur);
+    },
+    recover: function (tl, t, b) {
+      var M = MODS[b[0]], o = b[1] || {};
+      tl.to(M.s, { glitch: 0, duration: 0.25 }, t);
+      tl.fromTo(M.s, { e: 0.3 }, { e: 1, duration: o.dur || 1.0, ease: 'none', immediateRender: false }, t + 0.15);
+    },
+    open: function (tl, t, b) { tl.to(MODS[b[0]].s, { open: 1, duration: 0.9, ease: 'power4.out' }, t); },
+    close: function (tl, t, b) { tl.to(MODS[b[0]].s, { open: 0, duration: 0.6, ease: 'power3.in' }, t); },
+    pull: function (tl, t, b) {
+      var M = MODS[b[0]], i = b[1], o = b[2] || {};
+      var proxy = { v: 0 };
+      M.pullProxies = M.pullProxies || [];
+      M.pullProxies.push({ i: i, p: proxy });
+      tl.to(proxy, { v: 1, duration: 0.6, ease: 'power4.out' }, t);
+      tl.to(proxy, { v: 0, duration: 0.45, ease: 'power3.in' }, t + (o.dur || 1.6));
+      var name = (M.m.children && M.m.children[i]) || ('slot ' + i);
+      var tg = makeTag(b[0], o.text || name, { color: o.color || 'yellow', slot: i, dx: 0, dy: 0 });
+      tl.to(tg.s, { a: 1, duration: 0.25 }, t + 0.2);
+      tl.to(tg.s, { a: 0, duration: 0.25 }, t + (o.dur || 1.6));
+    },
+    tag: function (tl, t, b) {
+      var o = b[2] || {};
+      var tg = makeTag(b[0], b[1], o);
+      tl.to(tg.s, { a: 1, duration: 0.25 }, t);
+      tl.to(tg.s, { a: 0, duration: 0.3 }, t + (o.dur || 2.5));
+    },
+    forbid: function (tl, t, b) {
+      var P = PIPES[b[0]], o = b[1] || {};
+      tl.set(P.s, { a: 1 }, t);
+      tl.fromTo(P.s, { draw: 0 }, { draw: 1, duration: 0.6, ease: 'power3.out', immediateRender: false }, t);
+      tl.to(P.s, { red: 1, duration: 0.2 }, t + 0.45);
+      tl.to(P.s, { draw: 0, duration: 0.35, ease: 'power3.in' }, t + (o.dur || 2.2));
+      tl.set(P.s, { a: 0, red: 0 }, t + (o.dur || 2.2) + 0.36);
+    },
+    kept: function (tl, t, b) { tl.to(MODS[b[0]].s, { kept: b[1], duration: 0.4 }, t); },
+    camera: function (tl, t, b) {
+      var o = b[0];
+      var v = camVals(o); v.duration = o.dur || 1.2; v.ease = o.ease || 'expo.inOut';
+      tl.to(cam, v, t);
+    }
+  };
+
+  var tAcc = 0;
+  (S.chapters || []).forEach(function (ch, ci) {
+    var tl = G.timeline();
+    var t0 = tAcc, dur = ch.dur;
+    var rec = { id: ch.id, title: ch.title, short: ch.short || ch.id, idea: txt(ch.idea || ''), t0: t0, t1: t0 + dur, tree: !!ch.tree, stepWord: ch.stepWord || 'STEP', nSteps: 0, i: ci };
+    if (ch.camera) {
+      var v = camVals(ch.camera);
+      if (!ch.camera.shift) { v.sx = 0; v.sy = 0; } v.duration = ch.camera.dur || 1.4; v.ease = ch.camera.ease || 'expo.inOut';
+      if (ci === 0) { Object.assign(cam, v); delete cam.duration; delete cam.ease; }
+      else tl.to(cam, v, 0);
+    }
+    if (ch.focus) focusTween(tl, 0, ch.focus, ch.focusOpts);
+    if (ch.labels) labelTween(tl, 0, ch.labels);
+    var steps = (ch.beats || []).filter(function (b) { return b[1] === 'step'; }).length;
+    rec.nSteps = steps;
+    var si = 0;
+    (ch.beats || []).forEach(function (b) {
+      var at = b[0], verb = b[1], args = b.slice(2);
+      if (verb === 'idea') { IDEAS.push({ t: t0 + at, v: txt(args[0]) }); return; }
+      if (verb === 'step') { si++; STEPS.push({ t: t0 + at, ch: ci, n: si, N: steps, word: rec.stepWord, v: txt(args[0]) }); return; }
+      if (verb === 'tree') {
+        var row = S.tree[args[0]];
+        TREEV.push({ t: t0 + at, ch: ci, i: args[0] });
+        focusTween(tl, at, row && row.ids && row.ids.length ? row.ids : 'all', { ring: !!(row && row.ids && row.ids.length) });
+        return;
+      }
+      if (!BEATS[verb]) { console.warn('unknown beat', verb); return; }
+      BEATS[verb](tl, at, args);
+    });
+    tl.set({}, {}, dur); // pad to the chapter length
+    master.add(tl, t0);
+    master.addLabel(ch.id, t0);
+    CH.push(rec);
+    tAcc += dur;
+  });
+  var DURATION = master.duration();
+  IDEAS.sort(function (a, b) { return a.t - b.t; });
+  STEPS.sort(function (a, b) { return a.t - b.t; });
+  TREEV.sort(function (a, b) { return a.t - b.t; });
+  // apply the first chapter's camera
+  if (S.chapters[0] && S.chapters[0].camera) { Object.assign(cam, camVals(S.chapters[0].camera)); if (!S.chapters[0].camera.shift) { cam.sx = 0; cam.sy = 0; } }
+
+  // ---------- controls ----------
+  var playBtn = $('play'), track = $('track'), fillEl = $('fill'), knob = $('knob'), chapsEl = $('chaps'), tcEl = $('tc');
+  var ICON_PLAY = '<svg viewBox="0 0 12 12"><path d="M2 1l9 5-9 5z"/></svg>', ICON_PAUSE = '<svg viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
+  var snapFrames = 2;
+  function seek(t) { master.seek(Math.max(0, Math.min(DURATION, t)), false); snapFrames = 3; }
+  function setPlaying(p) {
+    if (p) { if (master.time() >= DURATION - 0.01) seek(0); master.play(); }
+    else master.pause();
+    syncPlayBtn();
+  }
+  function syncPlayBtn() {
+    var playing = !master.paused() && master.time() < DURATION;
+    playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  }
+  playBtn.addEventListener('click', function () { setPlaying(master.paused() || master.time() >= DURATION); });
+  CH.forEach(function (c, i) {
+    var b = el('button', '', '<span class="cn">' + String(i + 1).padStart(2, '0') + '</span><span class="cl">' + esc(c.short) + '</span>');
+    b.style.width = ((c.t1 - c.t0) / DURATION * 100) + '%';
+    b.title = c.title;
+    b.setAttribute('aria-label', 'Chapter ' + (i + 1) + ': ' + c.title);
+    b.addEventListener('click', function () { seek(c.t0 + 0.001); });
+    chapsEl.appendChild(b); c.btn = b;
+  });
+  var dragging = false, wasPlaying = false;
+  function scrubTo(ev) {
+    var r = track.getBoundingClientRect();
+    seek(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * DURATION);
+  }
+  track.addEventListener('pointerdown', function (ev) { dragging = true; wasPlaying = !master.paused(); master.pause(); track.setPointerCapture(ev.pointerId); scrubTo(ev); });
+  track.addEventListener('pointermove', function (ev) { if (dragging) scrubTo(ev); });
+  function endDrag() { if (!dragging) return; dragging = false; if (wasPlaying) master.play(); syncPlayBtn(); }
+  track.addEventListener('pointerup', endDrag);
+  track.addEventListener('pointercancel', endDrag);
+  document.querySelectorAll('#speed button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      master.timeScale(parseFloat(b.dataset.s));
+      document.querySelectorAll('#speed button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    });
+  });
+  function chapterAt(t) { for (var i = CH.length - 1; i >= 0; i--) if (t >= CH[i].t0 - 1e-6) return i; return 0; }
+  window.addEventListener('keydown', function (ev) {
+    if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+    if (ev.code === 'Space') { ev.preventDefault(); setPlaying(master.paused() || master.time() >= DURATION); }
+    else if (ev.code === 'ArrowRight') { ev.preventDefault(); var i = chapterAt(master.time()); if (i < CH.length - 1) seek(CH[i + 1].t0 + 0.001); }
+    else if (ev.code === 'ArrowLeft') { ev.preventDefault(); var j = chapterAt(master.time()); var tt = master.time(); seek(tt - CH[j].t0 > 1.2 || j === 0 ? CH[j].t0 + 0.001 : CH[j - 1].t0 + 0.001); }
+  });
+  master.eventCallback('onComplete', syncPlayBtn);
+
+  // ---------- layout of the 2D overlay ----------
+  var VW = 0, VH = 0, OBST = [], BAND = { l: 0, t: 0, r: 0, b: 0 };
+  var titleEl = $('title'), ideaEl = $('idea'), stepEl = $('step'), bandEl = $('band');
+  function rectOf(e) { var r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }
+  function measureLabels() {
+    MOD_LIST.forEach(function (M) {
+      var L = M.L, e = L.el;
+      e.classList.remove('brief'); L.wF = e.offsetWidth; L.hF = e.offsetHeight;
+      e.classList.add('brief'); L.wB = e.offsetWidth; L.hB = e.offsetHeight;
+      e.classList.toggle('brief', L.brief);
+    });
+    TAGS.forEach(function (tg) { tg.w = tg.el.offsetWidth; tg.h = tg.el.offsetHeight; });
+  }
+  function measureObstacles() {
+    OBST = [rectOf($('c-tl')), rectOf($('c-tr')), rectOf($('c-bl')), rectOf($('c-br')), rectOf($('legend'))];
+    var b = rectOf(bandEl);
+    BAND = { l: 0, t: 0, r: VW, b: b.b };
+  }
+  function resize() {
+    VW = window.innerWidth; VH = window.innerHeight;
+    renderer.setSize(VW, VH, false);
+    measureLabels();
+    measureObstacles();
+    snapFrames = 3;
+  }
+  window.addEventListener('resize', resize);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { resize(); });
+
+  function updateCamera() {
+    var aspect = VW / Math.max(1, VH);
+    var halfH = VIEW / 2, halfW = halfH * aspect;
+    var minHalfW = VIEW * 0.68;
+    if (halfW < minHalfW) { halfW = minHalfW; halfH = halfW / aspect; }
+    halfH /= cam.zoom; halfW /= cam.zoom;
+    camera.left = -halfW - 2 * halfW * cam.sx; camera.right = halfW - 2 * halfW * cam.sx;
+    camera.top = halfH + 2 * halfH * cam.sy; camera.bottom = -halfH + 2 * halfH * cam.sy;
+    camera.updateProjectionMatrix();
+    camera.position.set(cam.x + ISO.x * CAM_DIST, cam.y + ISO.y * CAM_DIST, cam.z + ISO.z * CAM_DIST);
+    camera.lookAt(cam.x, cam.y, cam.z);
+    camera.updateMatrixWorld();
+    floorMat.uniforms.uC.value.set(cam.x, cam.z);
+  }
+  var _v = new T.Vector3();
+  function toScreen(v, out) {
+    _v.copy(v).project(camera);
+    out.x = (_v.x * 0.5 + 0.5) * VW; out.y = (-_v.y * 0.5 + 0.5) * VH;
+    return out;
+  }
+
+  var _corner = new T.Vector3(), _cs = { x: 0, y: 0 };
+  function modRect(M) {
+    var top = Math.max(0.1, M.anchor.y - 0.05 - M.y) + M.root.position.y - M.y;
+    var x0 = M.x - M.w / 2, x1 = M.x + M.w / 2, z0 = M.z - M.d / 2, z1 = M.z + M.d / 2, y0 = M.y, y1 = M.y + top;
+    var r = { l: 1e9, t: 1e9, r: -1e9, b: -1e9 };
+    for (var i = 0; i < 8; i++) {
+      _corner.set(i & 1 ? x1 : x0, i & 2 ? y1 : y0, i & 4 ? z1 : z0);
+      toScreen(_corner, _cs);
+      if (_cs.x < r.l) r.l = _cs.x; if (_cs.x > r.r) r.r = _cs.x; if (_cs.y < r.t) r.t = _cs.y; if (_cs.y > r.b) r.b = _cs.y;
+    }
+    return r;
+  }
+  var DIRS = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0], ne: [1, -1], nw: [-1, -1], se: [1, 1], sw: [-1, 1] };
+  var VIS = [];
+  function overlap(a, b, m) { return a.l < b.r + m && a.r > b.l - m && a.t < b.b + m && a.b > b.t - m; }
+  function layoutLabels(dt) {
+    var safeT = BAND.b + 10, safeB = VH - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')) || 64) - 34, safeL = 10, safeR = VW - 10;
+    VIS.length = 0;
+    var treeOn = treeEl._a > 0.05;
+    var treeR = treeOn ? rectOf(treeEl) : null;
+    var sp = { x: 0, y: 0 };
+    MOD_LIST.forEach(function (M) {
+      var L = M.L;
+      var vis = M.s.la * Math.max(0, Math.min(1, M.s.e * 2 - 1)) * (1 - M.s.lift);
+      if (treeOn && VW < 760) vis *= Math.max(0, 1 - treeEl._a * 2); // phones: the tree panel carries the files chapter
+      L.a = vis;
+      if (vis < 0.01) { if (L.shown) { L.el.style.opacity = 0; L.coord.style.opacity = 0; L.line.style.opacity = 0; L.dot.style.opacity = 0; L.shown = false; } return; }
+      var brief = M.s.lf < 0.5;
+      if (brief !== L.brief) { L.brief = brief; L.el.classList.toggle('brief', brief); }
+      toScreen(M.anchor, sp);
+      var R = modRect(M);
+      var w = brief ? L.wB : L.wF, h = brief ? L.hB : L.hF;
+      var side = (brief ? M.m.sideBrief : null) || M.m.side || (sp.x > VW * 0.5 ? 'ne' : 'nw');
+      var x, y;
+      switch (side) {
+        case 'n': x = sp.x - w / 2; y = R.t - 12 - h; break;
+        case 's': x = sp.x - w / 2; y = R.b + 12; break;
+        case 'e': x = R.r + 14; y = sp.y - h / 2; break;
+        case 'w': x = R.l - 14 - w; y = sp.y - h / 2; break;
+        case 'se': x = R.r + 10; y = sp.y; break;
+        case 'sw': x = R.l - 10 - w; y = sp.y; break;
+        case 'nw': x = sp.x - 18 - w; y = R.t - 10 - h; break;
+        default: x = sp.x + 18; y = R.t - 10 - h;
+      }
+      var d = DIRS[side] || [1, -1];
+      VIS.push({ M: M, ax: sp.x, ay: sp.y, w: w, h: h, x: x, y: y, d: d });
+    });
+    var soft = [];
+    MOD_LIST.forEach(function (M) { if (M.root.visible && M.s.e > 0.5 && M.s.lift < 0.5 && M.s.dim > 0.5 && M.kind !== 'housing') soft.push(modRect(M)); });
+    var obst = OBST.slice();
+    if (treeR) obst.push(treeR);
+    TAGS.forEach(function (tg) { if (tg.on && tg.rect) obst.push(tg.rect); });
+    for (var it = 0; it < 14; it++) {
+      for (var i = 0; i < VIS.length; i++) {
+        var A = VIS[i];
+        for (var j = i + 1; j < VIS.length; j++) {
+          var B = VIS[j];
+          var ra = { l: A.x, t: A.y, r: A.x + A.w, b: A.y + A.h }, rb = { l: B.x, t: B.y, r: B.x + B.w, b: B.y + B.h };
+          if (!overlap(ra, rb, 6)) continue;
+          var oy = Math.min(ra.b, rb.b) - Math.max(ra.t, rb.t) + 6, ox = Math.min(ra.r, rb.r) - Math.max(ra.l, rb.l) + 6;
+          if (oy < ox * 1.6) { var sy = (A.y + A.h / 2) < (B.y + B.h / 2) ? -1 : 1; A.y += sy * oy / 2; B.y -= sy * oy / 2; }
+          else { var sx = (A.x + A.w / 2) < (B.x + B.w / 2) ? -1 : 1; A.x += sx * ox / 2; B.x -= sx * ox / 2; }
+        }
+        for (var k = 0; k < soft.length + obst.length; k++) {
+          var O = k < soft.length ? soft[k] : obst[k - soft.length], rr = { l: A.x, t: A.y, r: A.x + A.w, b: A.y + A.h };
+          if (k < soft.length && it > 9) continue;
+          if (!overlap(rr, O, 6)) continue;
+          var up = rr.b - O.t + 6, down = O.b - rr.t + 6, left = rr.r - O.l + 6, right = O.r - rr.l + 6;
+          var mn = Math.min(up, down, left, right);
+          if (mn === up) A.y -= up; else if (mn === down) A.y += down; else if (mn === left) A.x -= left; else A.x += right;
+        }
+        A.x = Math.max(safeL, Math.min(safeR - A.w, A.x));
+        A.y = Math.max(safeT, Math.min(safeB - A.h, A.y));
+      }
+    }
+    var k2 = snapFrames > 0 ? 1 : 1 - Math.exp(-dt * 16);
+    VIS.forEach(function (V) {
+      var L = V.M.L;
+      if (!L.shown) { L.x = V.x; L.y = V.y; }
+      else { L.x += (V.x - L.x) * k2; L.y += (V.y - L.y) * k2; }
+      L.shown = true;
+      L.el.style.opacity = V.M.L.a; L.coord.style.opacity = V.M.L.a * 0.95;
+      L.el.style.transform = 'translate3d(' + L.x.toFixed(1) + 'px,' + L.y.toFixed(1) + 'px,0)';
+      // leader: from the anchor to the nearest point of the card
+      var cx = Math.max(L.x, Math.min(L.x + V.w, V.ax)), cy = Math.max(L.y, Math.min(L.y + V.h, V.ay));
+      L.line.setAttribute('x1', V.ax.toFixed(1)); L.line.setAttribute('y1', V.ay.toFixed(1));
+      L.line.setAttribute('x2', cx.toFixed(1)); L.line.setAttribute('y2', cy.toFixed(1));
+      L.line.style.opacity = V.M.L.a; L.dot.style.opacity = V.M.L.a;
+      L.dot.setAttribute('cx', V.ax.toFixed(1)); L.dot.setAttribute('cy', V.ay.toFixed(1));
+      var tx = cx + (cx >= L.x + V.w - 1 ? -66 : 2), ty = cy >= L.y + V.h - 1 ? cy + 3 : cy <= L.y + 1 ? cy - 12 : cy - 5;
+      if (cy > L.y + 1 && cy < L.y + V.h - 1) { ty = L.y + V.h + 3; tx = L.x; }
+      L.coord.style.transform = 'translate3d(' + tx.toFixed(1) + 'px,' + ty.toFixed(1) + 'px,0)';
+      V.rect = { l: L.x, t: L.y, r: L.x + V.w, b: L.y + V.h };
+    });
+  }
+  var _anc = new T.Vector3(), _sp = { x: 0, y: 0 };
+  function layoutTags() {
+    TAGS.forEach(function (tg) {
+      var a = tg.s.a * Math.max(0, Math.min(1, tg.M.s.e * 2 - 1));
+      if (a < 0.01) { if (tg.on) { tg.el.style.opacity = 0; tg.on = false; } return; }
+      tg.on = true;
+      if (tg.slot !== undefined && tg.M.shelves[tg.slot]) {
+        var sh = tg.M.shelves[tg.slot];
+        _anc.set(tg.M.x + tg.M.w / 2, tg.M.y + sh.base.y, tg.M.z + tg.M.d / 2 + 0.6);
+        toScreen(_anc, _sp);
+        _sp.x += 10; _sp.y -= tg.h / 2;
+      } else {
+        if (tg.at) _anc.set(tg.at[0], tg.at[1], tg.at[2]); else _anc.copy(tg.M.anchor);
+        toScreen(_anc, _sp);
+        _sp.x += tg.dx - tg.w / 2; _sp.y += tg.dy - tg.h / 2;
+      }
+      var y = Math.max(BAND.b + 6, _sp.y), x = Math.max(8, Math.min(VW - tg.w - 8, _sp.x));
+      tg.el.style.opacity = a;
+      tg.el.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0)';
+      tg.rect = { l: x, t: y, r: x + tg.w, b: y + tg.h };
+    });
+  }
+
+  // ---------- per-frame state application ----------
+  function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
+  var _c = new T.Color();
+  function applyModules() {
+    MOD_LIST.forEach(function (M) {
+      var s = M.s;
+      var vis = s.e > 0.001 && s.lift < 0.999;
+      M.root.visible = vis;
+      M.shadow.visible = vis; M.ring.visible = vis && s.ring > 0.01;
+      if (!vis) return;
+      var n = M.parts.length, maxSeq = 0;
+      M.parts.forEach(function (p) { if (p.seq > maxSeq) maxSeq = p.seq; });
+      var stg = maxSeq > 0 ? Math.min(0.16, 0.6 / maxSeq) : 0;
+      var span = 1 - maxSeq * stg;
+      M.parts.forEach(function (p) {
+        var k = Math.max(0, Math.min(1, (s.e - p.seq * stg) / span));
+        var q = k >= 1 ? 1 : easeAsm(k);
+        p.g.visible = k > 0;
+        p.g.position.set(p.base.x + p.off.x * (1 - q), p.base.y + p.off.y * (1 - q), p.base.z + p.off.z * (1 - q));
+      });
+      // log pages beyond the initial stack
+      if (M.kind === 'log') {
+        var full = Math.floor(s.pages + 1e-4), frac = s.pages - full;
+        for (var i = M.nPages0; i < M.pages.length; i++) {
+          var pg = M.pages[i];
+          if (i < full) { pg.g.visible = true; pg.g.position.set(pg.base.x, pg.base.y, pg.base.z); }
+          else if (i === full && frac > 0.001) { pg.g.visible = true; pg.g.position.set(pg.base.x, pg.base.y + (1 - easeAsm(frac)) * 2.2, pg.base.z); }
+          else pg.g.visible = false;
+        }
+        var top = 0.08 + Math.max(full, M.nPages0) * 0.14;
+        M.anchor.y = M.y + top + 0.05;
+        Object.keys(M.mats).forEach(function (k) { M.mats[k].uniforms.uYR.value.set(M.y, M.y + top); });
+      }
+      // rack drawers
+      if (M.shelves.length) {
+        var pulls = M.shelves.map(function () { return 0; });
+        (M.pullProxies || []).forEach(function (pp) { pulls[pp.i] = Math.max(pulls[pp.i], pp.p.v); });
+        M.shelves.forEach(function (sh, i) { if (s.e >= 0.999) sh.g.position.z = sh.base.z + pulls[i] * 0.7; });
+      }
+      if (M.pivot) M.pivot.rotation.z = s.open * 1.36;
+      var lift = s.lift > 0 ? easeIn(s.lift) : 0;
+      M.root.position.y = M.y + lift * 9;
+      var mix = s.dim * (1 - s.lift);
+      Object.keys(M.mats).forEach(function (k) {
+        var u = M.mats[k].uniforms;
+        u.uMix.value = mix; u.uWrite.value = s.write; u.uKept.value = s.kept * (M.kind === 'store' || M.kind === 'log' ? 1 : 0.6); u.uGlitch.value = s.glitch;
+      });
+      _c.copy(COL.bg).lerp(M.edgeBase, mix);
+      if (s.glitch > 0) _c.lerp(COL.red, s.glitch * 0.8);
+      M.edgeMat.color.copy(_c);
+      M.shadowMat.uniforms.uMix.value = mix * Math.min(1, s.e * 1.5);
+      M.ringMat.uniforms.uA.value = s.ring * (1 - s.lift);
+    });
+  }
+  function applyPipes() {
+    PIPE_LIST.forEach(function (P) { P.flowNow = P.s.stream; P.headNow = -1; P.dirNow = 1; P.colNow = COL.blue; });
+    var used = 0;
+    PACKETS.forEach(function (rec) {
+      if (rec.s.a < 0.01 || used >= POOL.length) return;
+      var dist = rec.s.t * rec.total, acc = 0, seg = rec.seq[rec.seq.length - 1], local = 1;
+      for (var i = 0; i < rec.seq.length; i++) {
+        var q = rec.seq[i];
+        if (dist <= acc + q.P.len || i === rec.seq.length - 1) { seg = q; local = Math.max(0, Math.min(1, (dist - acc) / q.P.len)); break; }
+        acc += q.P.len;
+      }
+      var u = seg.rev ? 1 - local : local;
+      var pos = seg.P.pointAt(u);
+      var slot = POOL[used++];
+      slot.core.visible = slot.halo.visible = true;
+      slot.core.position.copy(pos); slot.halo.position.copy(pos);
+      _c.copy(rec.color).lerp(COL.red, rec.s.red);
+      slot.core.material.color.copy(_c);
+      slot.halo.material.uniforms.uCol.value.copy(_c);
+      slot.halo.material.uniforms.uA.value = rec.s.a;
+      slot.core.scale.setScalar(0.6 + 0.4 * rec.s.a);
+      if (rec.s.a > seg.P.flowNow) { seg.P.flowNow = Math.max(seg.P.flowNow, rec.s.a); seg.P.headNow = u; seg.P.dirNow = seg.rev ? -1 : 1; seg.P.colNow = rec.color; }
+      if (rec.s.red > 0.5) seg.P.redNow = Math.max(seg.P.redNow || 0, rec.s.red * rec.s.a * 0.7);
+    });
+    for (var k = used; k < POOL.length; k++) POOL[k].core.visible = POOL[k].halo.visible = false;
+    PIPE_LIST.forEach(function (P) {
+      var u = P.mat.uniforms;
+      var mix = Math.min(P.A.s.dim, P.B.s.dim) * Math.min(1 - P.A.s.lift, 1 - P.B.s.lift);
+      if (P.p.forbidden) mix = 1;
+      var vis = P.s.a > 0.01 && P.s.draw > 0.001 && mix > 0.02 && (P.A.s.e > 0.5 || P.p.forbidden) && (P.B.s.e > 0.5 || P.p.forbidden);
+      P.mesh.visible = vis;
+      u.uDraw.value = P.s.draw; u.uMix.value = mix; u.uFlow.value = P.flowNow; u.uHead.value = P.headNow; u.uDir.value = P.dirNow;
+      u.uCol.value.copy(P.colNow); u.uRed.value = Math.max(P.s.red, P.redNow || 0);
+      P.redNow = 0;
+      P.collarMat.uniforms.uMix.value = mix;
+      P.collarEdge.color.copy(COL.bg).lerp(COL.edge, mix);
+      if (P.collars[0]) P.collars[0].visible = vis && !P.p.forbidden;
+      if (P.collars[1]) P.collars[1].visible = vis && P.s.draw > 0.98 && !P.p.forbidden;
+    });
+  }
+
+  // ---------- HUD (text derived from the playhead, so scrubbing is exact) ----------
+  var hudCache = {};
+  function setHTML(e, key, html) { if (hudCache[key] !== html) { hudCache[key] = html; e.innerHTML = html; return true; } return false; }
+  function fmt(t) { var m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, '0') + ':' + (s < 10 ? '0' : '') + s.toFixed(1); }
+  function infHTML(v) { return esc(v.text.replace(/^INFERRED[:\s]+/, '')) + (v.inferred ? '<span class="inf">INFERRED</span>' : ''); }
+  var fpsAcc = 0, fpsN = 0, fpsShown = 0, fpsT = 0, frameMs = 0;
+  function hud(now, dt) {
+    var t = master.time(), ci = chapterAt(t), c = CH[ci];
+    var lt = t - c.t0;
+    var changed = setHTML(titleEl, 'title', esc(c.title));
+    var idea = c.idea;
+    for (var i = 0; i < IDEAS.length; i++) { if (IDEAS[i].t <= t + 1e-6 && IDEAS[i].t >= c.t0 - 1e-6) idea = IDEAS[i].v; }
+    changed = setHTML(ideaEl, 'idea', infHTML(idea)) || changed;
+    var st = null;
+    for (var j = 0; j < STEPS.length; j++) { if (STEPS[j].ch === ci && STEPS[j].t <= t + 1e-6) st = STEPS[j]; }
+    setHTML(stepEl, 'step', st ? '<span class="n">' + st.word + ' ' + st.n + '/' + st.N + '</span>' + infHTML(st.v) : '');
+    if (changed) measureObstacles();
+    var fadeIn = smooth01(lt / 0.55), fadeOut = smooth01((c.t1 - t) / 0.35);
+    var ta = ci === CH.length - 1 ? fadeIn : Math.min(fadeIn, fadeOut);
+    titleEl.style.opacity = ta; titleEl.style.transform = 'translateY(' + ((1 - fadeIn) * 10).toFixed(1) + 'px)';
+    ideaEl.style.opacity = ta; stepEl.style.opacity = ta;
+    // tree panel
+    var tr = -1;
+    if (c.tree) for (var k = 0; k < TREEV.length; k++) { if (TREEV[k].ch === ci && TREEV[k].t <= t + 1e-6) tr = TREEV[k].i; }
+    var treeA = c.tree ? ta : 0;
+    treeEl._a = treeA;
+    treeEl.style.opacity = treeA;
+    treeEl.style.top = (BAND.b + 18) + 'px';
+    if (hudCache.tree !== tr) { hudCache.tree = tr; TREE_ROWS.forEach(function (r, i) { r.classList.toggle('on', i === tr); }); }
+    if (treeA > 0.05 && tr >= 0 && S.tree[tr].ids && S.tree[tr].ids.length && MODS[S.tree[tr].ids[0]]) {
+      var rr = TREE_ROWS[tr].getBoundingClientRect();
+      var Mx = MODS[S.tree[tr].ids[0]];
+      toScreen(Mx.anchor, _sp);
+      treeLine.setAttribute('x1', (rr.right + 6).toFixed(1)); treeLine.setAttribute('y1', (rr.top + rr.height / 2).toFixed(1));
+      treeLine.setAttribute('x2', _sp.x.toFixed(1)); treeLine.setAttribute('y2', _sp.y.toFixed(1));
+      treeDot.setAttribute('cx', _sp.x.toFixed(1)); treeDot.setAttribute('cy', _sp.y.toFixed(1));
+      treeLine.style.opacity = treeA; treeDot.style.opacity = treeA;
+    } else { treeLine.style.opacity = 0; treeDot.style.opacity = 0; }
+    // corners
+    setHTML($('c-tl'), 'tl', '<b>CH ' + String(ci + 1).padStart(2, '0') + '/' + String(CH.length).padStart(2, '0') + '</b> &nbsp;' + esc(c.short.toUpperCase()) + ' &nbsp;' + fmt(t) + ' / ' + fmt(DURATION));
+    fpsAcc += dt; fpsN++;
+    if (now - fpsT > 500) { fpsShown = fpsN / Math.max(1e-3, fpsAcc); fpsAcc = 0; fpsN = 0; fpsT = now; }
+    setHTML($('fps'), 'fps', '<b>' + Math.round(fpsShown) + ' FPS</b><span class="fps-extra"> &nbsp;' + frameMs.toFixed(2) + ' ms js &nbsp;' + renderer.info.render.calls + ' draws</span>');
+    setHTML($('c-bl'), 'bl', 'CAM <b>x:' + cam.x.toFixed(2) + ' y:' + cam.y.toFixed(2) + ' z:' + cam.z.toFixed(2) + '</b> &nbsp;ZOOM <b>' + cam.zoom.toFixed(2) + '</b> <span class="iso"> &nbsp;ORTHO ISO 45° / 35.264°</span>');
+    tcEl.textContent = fmt(t) + ' / ' + fmt(DURATION);
+    var pr = t / DURATION;
+    fillEl.style.width = (pr * 100).toFixed(2) + '%';
+    knob.style.left = (pr * 100).toFixed(2) + '%';
+    track.setAttribute('aria-valuenow', Math.round(pr * 100));
+    CH.forEach(function (x, i) { x.btn.classList.toggle('on', i === ci); });
+  }
+
+  // ---------- loop ----------
+  var lastNow = performance.now();
+  function frame(now) {
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.1, Math.max(0, (now - lastNow) / 1000));
+    lastNow = now;
+    var t0 = performance.now();
+    if (master.isActive()) U.time.value += dt * master.timeScale();
+    updateCamera();
+    applyModules();
+    applyPipes();
+    layoutTags();
+    layoutLabels(dt);
+    hud(now, dt);
+    if (snapFrames > 0) snapFrames--;
+    frameMs = frameMs * 0.9 + (performance.now() - t0) * 0.1;
+    renderer.render(scene, camera);
+  }
+
+  // ---------- test hooks ----------
+  function report() {
+    var out = { t: master.time(), labels: [], tags: [], overlaps: [], offscreen: [], anchorsUnderBand: [], titleOverflow: false, ideaOverflow: false, stepOverflow: false };
+    var band = rectOf(bandEl);
+    var tl = rectOf(titleEl);
+    out.titleOverflow = titleEl.scrollWidth > Math.ceil(titleEl.clientWidth) + 1 || tl.r > VW - 12;
+    out.ideaOverflow = rectOf(ideaEl).r > VW - 12 || ideaEl.scrollWidth > Math.ceil(ideaEl.clientWidth) + 1;
+    out.stepOverflow = rectOf(stepEl).r > VW - 12;
+    var trr = rectOf($('c-tr'));
+    out.titleHitsLegend = Math.min(VW, tl.l + titleEl.scrollWidth) > trr.l - 8 && tl.t < trr.b;
+    var titleRect = { l: tl.l, t: tl.t, r: Math.min(VW, tl.l + titleEl.scrollWidth), b: rectOf(stepEl).b };
+    var obst = [{ n: 'title', r: titleRect }, { n: 'c-tl', r: OBST[0] }, { n: 'c-tr', r: OBST[1] }, { n: 'c-bl', r: OBST[2] }, { n: 'c-br', r: OBST[3] }, { n: 'bar', r: rectOf($('bar')) }];
+    if (treeEl._a > 0.05) obst.push({ n: 'tree', r: rectOf(treeEl) });
+    var items = VIS.filter(function (V) { return V.M.L.a > 0.5 && V.rect; }).map(function (V) { return { n: 'label:' + V.M.id, r: V.rect, a: [V.ax, V.ay] }; });
+    TAGS.forEach(function (tg) { if (tg.on && tg.s.a > 0.5 && tg.rect) items.push({ n: 'tag:' + tg.el.textContent, r: tg.rect }); });
+    out.labels = items.map(function (x) { return x.n; });
+    function ov(a, b) { return Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t)); }
+    for (var i = 0; i < items.length; i++) {
+      for (var j = i + 1; j < items.length; j++) { var o = ov(items[i].r, items[j].r); if (o > 4) out.overlaps.push([items[i].n, items[j].n, Math.round(o)]); }
+      obst.forEach(function (O) { var o2 = ov(items[i].r, O.r); if (o2 > 4) out.overlaps.push([items[i].n, O.n, Math.round(o2)]); });
+      var r = items[i].r;
+      if (r.l < 0 || r.t < 0 || r.r > VW || r.b > VH) out.offscreen.push(items[i].n);
+      if (items[i].a && items[i].a[1] < band.b) out.anchorsUnderBand.push(items[i].n);
+    }
+    // focused modules that fall off screen
+    out.modulesOffscreen = [];
+    MOD_LIST.forEach(function (M) {
+      if (M.s.e < 0.5 || M.s.dim < 0.9 || M.s.lift > 0.5) return;
+      var pts = [[M.x - M.w / 2, M.y, M.z - M.d / 2], [M.x + M.w / 2, M.y, M.z + M.d / 2], [M.x + M.w / 2, M.y + M.top, M.z - M.d / 2], [M.x - M.w / 2, M.y + M.top, M.z + M.d / 2]];
+      var bad = pts.some(function (p) { var q = toScreen(new T.Vector3(p[0], p[1], p[2]), {}); return q.x < 0 || q.x > VW || q.y < band.b - 40 || q.y > VH - 64; });
+      if (bad) out.modulesOffscreen.push(M.id);
+    });
+    out.jsFrameMs = frameMs;
+    out.draws = renderer.info.render.calls;
+    return out;
+  }
+  window.__explainer = {
+    ready: true, duration: DURATION, chapters: CH.map(function (c) { return { id: c.id, title: c.title, t0: c.t0, t1: c.t1 }; }),
+    seek: function (t) { master.pause(); seek(t); syncPlayBtn(); }, play: function () { setPlaying(true); }, pause: function () { setPlaying(false); },
+    report: report, master: master
+  };
+
+  resize();
+  updateCamera();
+  requestAnimationFrame(frame);
+  var startAt = parseFloat(Q.get('t') || '0') || 0;
+  if (startAt) seek(startAt);
+  if (Q.get('paused') !== '1') setTimeout(function () { setPlaying(true); }, 350);
+  else syncPlayBtn();
+})();
+
+</script>
+</body>
+</html>
