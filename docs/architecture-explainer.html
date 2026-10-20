@@ -64,6 +64,7 @@ body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 .lbl .sy::before { content: "fn "; color: var(--grey); }
 .lbl .sy.type::before { content: "type "; }
 .lbl .sy.val::before { content: "const "; }
+.lbl .sy.class::before { content: "class "; }
 .lbl pre { margin: 5px 0 0; padding: 4px 6px; background: var(--bg); font: 400 9.5px/1.45 var(--mono); color: var(--ink-2); border-left: 2px solid var(--hair); }
 .lbl pre .ln { color: var(--grey); margin-right: 8px; }
 .lbl .detail { display: block; }
@@ -301,7 +302,7 @@ window.SPEC = {
         [1.8, 'labels', { full: ['housing'] }],
         [2.4, 'draw', ['in', 'out'], { dur: 0.9 }],
         // fact: server.js:17-20 "Listen on this machine only" ... const hostname = process.env.HOST || '127.0.0.1'
-        [3.0, 'tag', 'housing', 'listens on 127.0.0.1', { dur: 2.4, dy: -40 }],
+        [3.0, 'tag', 'housing', 'binds 127.0.0.1 by default', { dur: 2.4, dy: -40 }],
         // fact: CLAUDE.md:66 "User clicks Run or presses Cmd/Ctrl+Enter"
         [5.0, 'tag', 'user', 'Run: Cmd/Ctrl+Enter', { color: 'yellow', dur: 2.2 }],
         [5.2, 'flow', 'in', { dur: 1.6 }],
@@ -363,12 +364,12 @@ window.SPEC = {
         [6.8, 'focus', ['store', 'executors']], [6.8, 'labels', { full: ['executors'], brief: ['store'] }],
         [7.0, 'step', 'executeWorkflow sorts nodes into levels and dispatches executeNanoBanana'],
         [7.2, 'flow', 'se', { dur: 1.5 }], [8.6, 'pull', 'executors', 0, { dur: 1.5 }],
-        // fact: nanoBananaExecutor.ts:104 status "loading"; :142 fetch("/api/generate"); :146 signal (flow step 4)
+        // fact: nanoBananaExecutor.ts:104 status "loading" (set first); :142 fetch("/api/generate"); :146 signal (flow step 4)
         [10.0, 'camera', { at: [1.0, 0.5, -5.0], zoom: 1.3, dur: 1.3 }],
         [10.0, 'focus', ['executors', 'generate']], [10.0, 'labels', { full: ['generate'], brief: ['executors'] }],
-        [10.2, 'step', 'The executor POSTs prompt and images to /api/generate; the node shows loading'],
+        [10.2, 'step', 'The node shows loading; the executor POSTs prompt and images to /api/generate'],
         [10.8, 'flow', 'eg', { dur: 1.5 }],
-        // fact: route.ts:112 default "gemini"; route.ts:124 "User-provided key takes precedence over env variable" (flow step 5)
+        // fact: route.ts:112 default "gemini"; route.ts:606-607 "User-provided key (from settings) takes precedence over env variable" (flow step 5)
         [13.0, 'focus', ['generate', 'providers']], [13.0, 'labels', { full: ['providers'], brief: ['generate'] }],
         [13.2, 'step', 'The route picks the provider (default gemini): header key first, then .env'],
         [13.4, 'flow', 'gp', { dur: 1.4 }], [14.7, 'pull', 'providers', 0, { dur: 1.5 }],
@@ -432,13 +433,13 @@ window.SPEC = {
         // fact: facts state.stores[0].note "Comes back only from a saved workflow file"; no auto-reopen in the web build
         // (DesktopRecovery.tsx:21 skips recovery outside the desktop app)
         [17.4, 'flow', '-sw', { dur: 1.3 }],
-        // fact: facts state.stores[0].note; workflow file route.ts:14 POST / load by the user (no auto-reopen found in src/)
-        [18.0, 'tag', 'store', 'reopened by hand: last save', { color: 'magenta', dur: 2.4 }],
+        // fact: facts state.stores[0].note "Comes back only from a saved workflow file or, in the desktop app, a recovery checkpoint"
+        [18.0, 'tag', 'store', 'web: back from a saved file', { color: 'magenta', dur: 2.4 }],
         // fact: src/lib/desktop/recovery.ts:12 "Stopped after recovery ... no requests were resubmitted."; DesktopRecovery.tsx:81
         [20.6, 'idea', 'Desktop recovery stops running nodes and never resubmits a provider request.'],
         [20.6, 'focus', ['store', 'executors', 'generate']], [20.6, 'labels', { brief: ['store', 'executors', 'generate'] }],
-        // fact: electron/lib/recovery.cjs:44 checkpoint-v1.json; DesktopRecovery.tsx:76 "Restore checkpointed tabs and edits"
-        [20.8, 'tag', 'store', 'desktop: restores checkpoint', { color: 'magenta', dur: 2.0 }],
+        // fact: electron/lib/recovery.cjs:44 checkpoint-v1.json; DesktopRecovery.tsx:73-76 "Restore your previous session?" (Restore or Discard)
+        [20.8, 'tag', 'store', 'desktop: offers checkpoint', { color: 'magenta', dur: 2.0 }],
         // fact: recovery.ts:12 "Stopped after recovery"; DesktopRecovery.tsx:80 "Interrupted generations will be stopped."
         [21.8, 'tag', 'executors', 'running nodes: stopped', { dur: 3.0 }],
         // fact: DesktopRecovery.tsx:81 "Recovery never submits requests."
@@ -454,8 +455,9 @@ window.SPEC = {
       focus: ['executors', 'generate', 'providers'], labels: { full: ['generate'] },
       beats: [
         // fact: README.md:14 "Local, private, MIT, BYOK."; route.ts:125 header key || process.env; server.js:17-20 listen on this machine only
-        // fact: server.js:87-89 refuses cross-site /api calls (facts decision "The server answers only this machine")
-        [1.4, 'step', 'Local and BYOK: keys ride each request; /api answers only this app on this machine'],
+        // fact: server.js:87-89 refuses cross-site /api calls (facts decision "The server answers only this machine");
+        // server.js:65 requests without browser headers (local scripts) still pass, so not "only this app"
+        [1.4, 'step', 'Local and BYOK: keys ride each request; /api answers this machine, not other sites'],
         [1.6, 'flow', 'eg', { dur: 1.5 }],
         // fact: src/store/utils/buildApiHeaders.ts:15 gemini: "X-Gemini-API-Key"; nanoBananaExecutor.ts:112
         [2.0, 'tag', 'executors', 'X-Gemini-API-Key header', { color: 'blue', dur: 2.4 }],
