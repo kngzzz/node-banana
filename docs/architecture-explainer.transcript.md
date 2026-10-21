@@ -12,13 +12,13 @@ The spoken narration of `architecture-explainer.html` (commit `8929b7a`), in ord
 
 ## 2. Who owns what (0:14–0:42)
 
-**0:15** In the browser, you wire typed nodes on a canvas; a store runs them.
+**0:15** In the browser, you wire typed nodes on a canvas; an in-memory store runs them.
 
-**0:20** Executors do each node's work; the recorder uploads each output.
+**0:20** Executors do the nodes' work; the recorder saves each media output.
 
 **0:25** On the server, the generate route picks a provider; an adapter makes the call.
 
-**0:30** The asset library keeps every output on disk; workflows save as files.
+**0:30** The asset library keeps each media output on disk; workflows save as files.
 
 **0:36** An agent chat builds and edits workflows on your Claude Code or Codex login.
 
@@ -26,11 +26,11 @@ The spoken narration of `architecture-explainer.html` (commit `8929b7a`), in ord
 
 **0:43** The canvas catches Cmd/Ctrl+Enter.
 
-**0:46** runBatch repeats the run as often as you set.
+**0:46** runBatch repeats the run up to the count you set.
 
 **0:49** The store runs inputs first, then the image executor.
 
-**0:52** The node shows a spinner and calls the server.
+**0:52** While the node spins, its executor calls the server.
 
 **0:55** The route picks Gemini, preferring your Settings key.
 
@@ -60,13 +60,13 @@ The spoken narration of `architecture-explainer.html` (commit `8929b7a`), in ord
 
 **1:43** Other sites can't call the server to spend your credits.
 
-**1:46** Second, every output is saved; the browser mints its ID.
+**1:46** Second, each media output is saved; the browser mints its ID.
 
 **1:50** So a retried upload gets back the same record.
 
 **1:53** Third, the agent edits but can't start a run, so a planted prompt can't spend credits.
 
-**1:59** It offers a Run button; only your press starts the run.
+**1:59** The agent offers a Run button; only you start the run.
 
 ## 6. Reading the tree (2:03–2:19)
 
