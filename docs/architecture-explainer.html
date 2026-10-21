@@ -23,6 +23,10 @@
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --bar-h: 64px;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; }
@@ -38,16 +42,16 @@ body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 /* debug corners */
 .corner { position: absolute; font: 400 10px/1.45 var(--mono); color: var(--grey); letter-spacing: 0.02em; white-space: nowrap; }
 .corner b { color: var(--ink); font-weight: 600; }
-#c-tl { top: 14px; left: 18px; }
-#c-tr { top: 14px; right: 18px; text-align: right; }
-#c-bl { bottom: calc(var(--bar-h) + 12px); left: 18px; }
-#c-br { bottom: calc(var(--bar-h) + 12px); right: 18px; text-align: right; }
+#c-tl { top: calc(14px + var(--sat)); left: max(18px, var(--sal)); }
+#c-tr { top: calc(14px + var(--sat)); right: max(18px, var(--sar)); text-align: right; }
+#c-bl { bottom: calc(var(--bar-h) + var(--sab) + 12px); left: max(18px, var(--sal)); }
+#c-br { bottom: calc(var(--bar-h) + var(--sab) + 12px); right: max(18px, var(--sar)); text-align: right; }
 #legend { margin-top: 8px; display: inline-grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 1px; text-align: left; }
 #legend i { display: inline-block; width: 8px; height: 8px; margin-right: 5px; vertical-align: -1px; }
 #legend span { color: var(--ink-2); }
 
 /* title band */
-#band { position: absolute; top: 36px; left: 18px; max-width: min(72vw, 1100px); }
+#band { position: absolute; top: calc(36px + var(--sat)); left: max(18px, var(--sal)); max-width: min(72vw, 1100px); }
 #title { font: 500 clamp(24px, 3.1vw, 42px)/1.08 var(--sans); letter-spacing: -0.022em; white-space: nowrap; margin: 0; }
 #idea { margin-top: 8px; font: 400 clamp(13px, 1.12vw, 16px)/1.35 var(--sans); color: var(--ink-2); white-space: nowrap; }
 #step { margin-top: 8px; font: 500 11px/1.4 var(--mono); color: var(--ink); white-space: nowrap; min-height: 15px; }
@@ -83,7 +87,7 @@ body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 .tag.yellow { background: var(--yellow); border-color: var(--ink); }
 
 /* file tree */
-#tree { position: absolute; left: 18px; width: min(460px, 44vw); opacity: 0; font: 400 11px/1.25 var(--mono); }
+#tree { position: absolute; left: max(18px, var(--sal)); width: min(460px, 44vw); opacity: 0; font: 400 11px/1.25 var(--mono); }
 #tree .hd { color: var(--grey); font-size: 10px; margin-bottom: 6px; }
 #tree .row { display: flex; gap: 10px; padding: 3px 0 3px 10px; color: var(--grey); border-left: 2px solid transparent; }
 #tree .row .p { color: var(--ink-2); min-width: 9.5em; font-weight: 600; }
@@ -92,7 +96,7 @@ body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 #tree .row.on .p { color: var(--ink); }
 
 /* control bar */
-#bar { position: fixed; left: 0; right: 0; bottom: 0; height: var(--bar-h); background: var(--paper); border-top: 1px solid var(--hair); display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; column-gap: 14px; padding: 0 18px; font: 400 10px/1 var(--mono); color: var(--grey); user-select: none; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--bar-h) + var(--sab)); padding-bottom: var(--sab) !important; background: var(--paper); border-top: 1px solid var(--hair); display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; column-gap: 14px; padding: 0 max(18px, var(--sar)) 0 max(18px, var(--sal)); font: 400 10px/1 var(--mono); color: var(--grey); user-select: none; }
 #bar button { font: inherit; color: var(--ink); background: none; border: 0; cursor: pointer; padding: 0; }
 #bar button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 #play { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--ink) !important; }
@@ -114,20 +118,20 @@ body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 
 @media (max-width: 760px) {
   :root { --bar-h: 64px; }
-  #band { top: 32px; max-width: calc(100vw - 36px); }
+  #band { top: calc(32px + var(--sat)); max-width: calc(100vw - 36px); }
   #title { font-size: 22px; white-space: normal; }
   #idea { white-space: normal; font-size: 13px; }
   #step { white-space: normal; font-size: 10px; line-height: 1.5; }
   #c-tr .fps-extra, #legend span { display: none; }
-  #legend { position: fixed; left: 12px; bottom: calc(var(--bar-h) + 40px); margin: 0; grid-template-columns: auto auto auto auto; column-gap: 10px; }
-  #c-bl { left: 12px; bottom: calc(var(--bar-h) + 8px); }
+  #legend { position: fixed; left: max(12px, var(--sal)); bottom: calc(var(--bar-h) + var(--sab) + 40px); margin: 0; grid-template-columns: auto auto auto auto; column-gap: 10px; }
+  #c-bl { left: max(12px, var(--sal)); bottom: calc(var(--bar-h) + var(--sab) + 8px); }
   #c-bl .iso { display: none; }
-  #c-br { right: 12px; bottom: calc(var(--bar-h) + 24px); }
+  #c-br { right: max(12px, var(--sar)); bottom: calc(var(--bar-h) + var(--sab) + 24px); }
   #c-br .br { display: none; }
   #chaps button { padding: 0 3px !important; font-size: 9px; }
   #chaps button .cl { display: none; }
   #chaps button .cn { margin: 0; }
-  #bar { grid-template-columns: auto 1fr auto; column-gap: 10px; padding: 0 12px; }
+  #bar { grid-template-columns: auto 1fr auto; column-gap: 10px; padding: 0 max(12px, var(--sar)) 0 max(12px, var(--sal)); }
   #tc { display: none; }
   #speed button { padding: 6px 5px !important; }
   .lbl { max-width: 240px; }
@@ -1293,7 +1297,7 @@ window.SPEC = {
   master.eventCallback('onComplete', syncPlayBtn);
 
   // ---------- layout of the 2D overlay ----------
-  var VW = 0, VH = 0, OBST = [], BAND = { l: 0, t: 0, r: 0, b: 0 };
+  var VW = 0, VH = 0, OBST = [], BAND = { l: 0, t: 0, r: 0, b: 0 }, BAR_TOP = 0;
   var titleEl = $('title'), ideaEl = $('idea'), stepEl = $('step'), bandEl = $('band');
   function rectOf(e) { var r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }
   function measureLabels() {
@@ -1309,6 +1313,7 @@ window.SPEC = {
     OBST = [rectOf($('c-tl')), rectOf($('c-tr')), rectOf($('c-bl')), rectOf($('c-br')), rectOf($('legend'))];
     var b = rectOf(bandEl);
     BAND = { l: 0, t: 0, r: VW, b: b.b };
+    BAR_TOP = rectOf($('bar')).t;
   }
   function resize() {
     VW = window.innerWidth; VH = window.innerHeight;
@@ -1357,7 +1362,7 @@ window.SPEC = {
   var VIS = [];
   function overlap(a, b, m) { return a.l < b.r + m && a.r > b.l - m && a.t < b.b + m && a.b > b.t - m; }
   function layoutLabels(dt) {
-    var safeT = BAND.b + 10, safeB = VH - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')) || 64) - 34, safeL = 10, safeR = VW - 10;
+    var safeT = BAND.b + 10, safeB = (BAR_TOP || VH - 64) - 34, safeL = 10, safeR = VW - 10;
     VIS.length = 0;
     var treeOn = treeEl._a > 0.05;
     var treeR = treeOn ? rectOf(treeEl) : null;
@@ -1571,7 +1576,7 @@ window.SPEC = {
     for (var j = 0; j < STEPS.length; j++) { if (STEPS[j].ch === ci && STEPS[j].t <= t + 1e-6) st = STEPS[j]; }
     setHTML(stepEl, 'step', st ? '<span class="n">' + st.word + ' ' + st.n + '/' + st.N + '</span>' + infHTML(st.v) : '');
     if (changed) measureObstacles();
-    var fadeIn = smooth01(lt / 0.55), fadeOut = smooth01((c.t1 - t) / 0.35);
+    var fadeIn = ci === 0 ? 1 : smooth01(lt / 0.55), fadeOut = smooth01((c.t1 - t) / 0.35);
     var ta = ci === CH.length - 1 ? fadeIn : Math.min(fadeIn, fadeOut);
     titleEl.style.opacity = ta; titleEl.style.transform = 'translateY(' + ((1 - fadeIn) * 10).toFixed(1) + 'px)';
     ideaEl.style.opacity = ta; stepEl.style.opacity = ta;
@@ -1672,8 +1677,11 @@ window.SPEC = {
   requestAnimationFrame(frame);
   var startAt = parseFloat(Q.get('t') || '0') || 0;
   if (startAt) seek(startAt);
-  if (Q.get('paused') !== '1') setTimeout(function () { setPlaying(true); }, 350);
-  else syncPlayBtn();
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* older browsers */ }
+  if (Q.get('paused') === '1') syncPlayBtn();
+  else if (reduceMotion && !startAt) { seek(DURATION); syncPlayBtn(); } // open on the recap; Play starts from the top
+  else setTimeout(function () { setPlaying(true); }, 350);
 })();
 
 </script>
